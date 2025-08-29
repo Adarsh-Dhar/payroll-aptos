@@ -35,6 +35,8 @@ async function main() {
     create: {
       githubId: 'alice-dev',
       username: 'alice-dev',
+      email: 'alice@example.com',
+      password: 'password123', // TODO: Replace with bcrypt hash in production
     },
   });
 
@@ -44,6 +46,8 @@ async function main() {
     create: {
       githubId: 'bob-coder',
       username: 'bob-coder',
+      email: 'bob@example.com',
+      password: 'password123', // TODO: Replace with bcrypt hash in production
     },
   });
 
@@ -53,6 +57,20 @@ async function main() {
     create: {
       githubId: 'carol-engineer',
       username: 'carol-engineer',
+      email: 'carol@example.com',
+      password: 'password123', // TODO: Replace with bcrypt hash in production
+    },
+  });
+
+  // Add demo contributor account for testing
+  const demoContributor = await prisma.developer.upsert({
+    where: { githubId: 'demo-dev' },
+    update: {},
+    create: {
+      githubId: 'demo-dev',
+      username: 'demo-dev',
+      email: 'dev@example.com',
+      password: 'devpass123', // TODO: Replace with bcrypt hash in production
     },
   });
 
