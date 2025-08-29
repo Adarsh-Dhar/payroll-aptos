@@ -75,7 +75,8 @@ export default function AuthPage() {
         });
         
         setTimeout(() => {
-          router.push('/dashboard');
+          const nextPath = data.user?.role === 'admin' ? '/admin/dashboard' : '/contributor/dashboard';
+          router.push(nextPath);
         }, 1000);
       } else {
         setError(data.message || (isLogin ? 'Login failed' : 'Account creation failed'));
@@ -142,7 +143,8 @@ export default function AuthPage() {
         });
         
         setTimeout(() => {
-          router.push('/dashboard');
+          const nextPath = data.user?.role === 'admin' ? '/admin/dashboard' : '/contributer/dashboard';
+          router.push(nextPath);
         }, 1000);
       } else {
         setError(data.message || (isLogin ? 'Login failed' : 'Account creation failed'));
