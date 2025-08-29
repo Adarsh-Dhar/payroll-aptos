@@ -2,7 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient();
+// Declare global type for Prisma client
+declare global {
+  var prisma: PrismaClient | undefined;
+}
+
+// Create a singleton Prisma client instance
+const prisma = global.prisma || new PrismaClient();
+
+if (process.env.NODE_ENV !== 'production') {
+  global.prisma = prisma;
+}
 
 const createProjectSchema = z.object({
   name: z.string().min(1),
@@ -54,8 +64,12 @@ export async function GET(request: NextRequest) {
       };
     }
 
+    console.log('Query parameters:', { page, limit, search, adminId, isActive, tags });
+    console.log('Where clause:', JSON.stringify(where, null, 2));
+
     // Get total count
     const total = await prisma.project.count({ where });
+    console.log('Total projects found:', total);
 
     // Get paginated projects
     const projects = await prisma.project.findMany({
@@ -80,6 +94,8 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'desc' },
     });
 
+    console.log('Projects fetched successfully:', projects.length);
+
     return NextResponse.json({
       success: true,
       data: projects,
@@ -92,6 +108,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     if (error instanceof z.ZodError) {
+      console.error('Validation error:', error.errors);
       return NextResponse.json(
         { success: false, message: 'Invalid query parameters', errors: error.errors },
         { status: 400 }
@@ -99,12 +116,17 @@ export async function GET(request: NextRequest) {
     }
 
     console.error('Projects fetch error:', error);
+    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+    
     return NextResponse.json(
-      { success: false, message: 'Internal server error' },
+      { 
+        success: false, 
+        message: 'Internal server error',
+        error: error instanceof Error ? error.message : 'Unknown error',
+        details: process.env.NODE_ENV === 'development' ? error : undefined
+      },
       { status: 500 }
     );
-  } finally {
-    await prisma.$disconnect();
   }
 }
 
@@ -157,7 +179,5 @@ export async function POST(request: NextRequest) {
       { success: false, message: 'Internal server error' },
       { status: 500 }
     );
-  } finally {
-    await prisma.$disconnect();
   }
 }
