@@ -36,6 +36,9 @@ model Project {
   repoUrl      String
   adminId      Int
   budget       Float
+  isActive     Boolean       @default(true)
+  maxContributors Int?
+  tags         String[]      @default([])
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
   payouts      Payout[]
@@ -43,6 +46,7 @@ model Project {
   pullRequests PullRequest[]
 
   @@index([adminId])
+  @@index([isActive])
 }
 
 model PullRequest {

@@ -10,6 +10,9 @@ const updateProjectSchema = z.object({
   repoUrl: z.string().url().optional(),
   budget: z.number().positive().optional(),
   adminId: z.number().int().positive().optional(),
+  isActive: z.boolean().optional(),
+  maxContributors: z.number().int().positive().optional(),
+  tags: z.array(z.string()).optional(),
 });
 
 export async function GET(

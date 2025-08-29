@@ -10,19 +10,24 @@ const createProjectSchema = z.object({
   repoUrl: z.string().url(),
   budget: z.number().positive(),
   adminId: z.number().int().positive(),
+  isActive: z.boolean().default(true),
+  maxContributors: z.number().int().positive().optional(),
+  tags: z.array(z.string()).default([]),
 });
 
 const querySchema = z.object({
-  page: z.string().transform(Number).pipe(z.number().min(1)).default(1),
-  limit: z.string().transform(Number).pipe(z.number().min(1).max(100)).default(20),
+  page: z.string().transform(Number).pipe(z.number().min(1)).default("1"),
+  limit: z.string().transform(Number).pipe(z.number().min(1).max(100)).default("20"),
   search: z.string().optional(),
   adminId: z.string().transform(Number).optional(),
+  isActive: z.string().transform(val => val === 'true').optional(),
+  tags: z.string().optional(),
 });
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const { page, limit, search, adminId } = querySchema.parse(Object.fromEntries(searchParams));
+    const { page, limit, search, adminId, isActive, tags } = querySchema.parse(Object.fromEntries(searchParams));
 
     // Build where clause
     const where: any = {};
@@ -36,6 +41,17 @@ export async function GET(request: NextRequest) {
 
     if (adminId) {
       where.adminId = adminId;
+    }
+
+    if (isActive !== undefined) {
+      where.isActive = isActive;
+    }
+
+    if (tags) {
+      const tagArray = tags.split(',').map(tag => tag.trim());
+      where.tags = {
+        hasSome: tagArray
+      };
     }
 
     // Get total count
