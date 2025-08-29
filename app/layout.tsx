@@ -6,6 +6,7 @@ import { Analytics } from "@vercel/analytics/next"
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Suspense } from "react"
+import AuthSessionProvider from "@/components/auth-session-provider"
 
 export const metadata: Metadata = {
   title: "v0 App",
@@ -22,10 +23,12 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable} antialiased min-h-dvh`}>
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} disableTransitionOnChange>
-          <Suspense fallback={null}>
-            {children}
-            <Analytics />
-          </Suspense>
+          <AuthSessionProvider>
+            <Suspense fallback={null}>
+              {children}
+              <Analytics />
+            </Suspense>
+          </AuthSessionProvider>
         </ThemeProvider>
       </body>
     </html>
