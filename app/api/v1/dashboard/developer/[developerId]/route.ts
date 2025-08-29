@@ -206,7 +206,7 @@ export async function GET(
         projectBreakdown: projectBreakdownWithStats,
         recentPRs: recentPRDetails,
         recentPayouts: recentPayoutDetails,
-        recentActivity,
+        activityFeed: recentActivity,
         performance: {
           prSuccessRate: totalPRs > 0 ? (mergedPRs / totalPRs) * 100 : 0,
           averageEarningsPerPR: mergedPRs > 0 ? totalEarnings / mergedPRs : 0,

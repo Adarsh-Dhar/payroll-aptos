@@ -12,6 +12,7 @@ async function main() {
     create: {
       email: 'admin@devpaystream.com',
       name: 'Admin User',
+      password: 'admin123', // TODO: Replace with bcrypt hash in production
     },
   });
 
@@ -21,6 +22,7 @@ async function main() {
     create: {
       email: 'admin2@devpaystream.com',
       name: 'Secondary Admin',
+      password: 'admin123', // TODO: Replace with bcrypt hash in production
     },
   });
 
@@ -203,10 +205,10 @@ async function main() {
 
   // Create payouts
   const payout1 = await prisma.payout.upsert({
-    where: { id: 1 },
+    where: { id: 'payout-1' },
     update: {},
     create: {
-      id: 1,
+      id: 'payout-1',
       amount: 150,
       developerId: developer1.id,
       projectId: project1.id,
@@ -215,10 +217,10 @@ async function main() {
   });
 
   const payout2 = await prisma.payout.upsert({
-    where: { id: 2 },
+    where: { id: 'payout-2' },
     update: {},
     create: {
-      id: 2,
+      id: 'payout-2',
       amount: 200,
       developerId: developer1.id,
       projectId: project2.id,
@@ -227,10 +229,10 @@ async function main() {
   });
 
   const payout3 = await prisma.payout.upsert({
-    where: { id: 3 },
+    where: { id: 'payout-3' },
     update: {},
     create: {
-      id: 3,
+      id: 'payout-3',
       amount: 180,
       developerId: developer3.id,
       projectId: project2.id,
@@ -239,10 +241,10 @@ async function main() {
   });
 
   const payout4 = await prisma.payout.upsert({
-    where: { id: 4 },
+    where: { id: 'payout-4' },
     update: {},
     create: {
-      id: 4,
+      id: 'payout-4',
       amount: 120,
       developerId: developer2.id,
       projectId: project3.id,

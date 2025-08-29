@@ -10,8 +10,8 @@ const createDeveloperSchema = z.object({
 });
 
 const querySchema = z.object({
-  page: z.string().transform(Number).pipe(z.number().min(1)).default(1),
-  limit: z.string().transform(Number).pipe(z.number().min(1).max(100)).default(20),
+  page: z.string().transform(Number).pipe(z.number().min(1)).default('1'),
+  limit: z.string().transform(Number).pipe(z.number().min(1).max(100)).default('20'),
   search: z.string().optional(),
   active: z.string().transform(val => val === 'true').optional(),
 });
@@ -48,6 +48,7 @@ export async function GET(request: NextRequest) {
           select: {
             amount: true,
             paidAt: true,
+            projectId: true,
           }
         }
       },

@@ -10,8 +10,8 @@ const createPayoutSchema = z.object({
 });
 
 const querySchema = z.object({
-  page: z.string().transform(Number).pipe(z.number().min(1)).default(1),
-  limit: z.string().transform(Number).pipe(z.number().min(1).max(100)).default(20),
+  page: z.string().transform(Number).pipe(z.number().min(1)).default('1'),
+  limit: z.string().transform(Number).pipe(z.number().min(1).max(100)).default('20'),
   developerId: z.string().transform(Number).optional(),
   startDate: z.string().optional(),
   endDate: z.string().optional(),

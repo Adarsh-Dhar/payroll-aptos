@@ -19,8 +19,8 @@ const createPRSchema = z.object({
 });
 
 const querySchema = z.object({
-  page: z.string().transform(Number).pipe(z.number().min(1)).default(1),
-  limit: z.string().transform(Number).pipe(z.number().min(1).max(100)).default(20),
+  page: z.string().transform(Number).pipe(z.number().min(1)).default('1'),
+  limit: z.string().transform(Number).pipe(z.number().min(1).max(100)).default('20'),
   merged: z.string().transform(val => val === 'true').optional(),
   developerId: z.string().transform(Number).optional(),
   search: z.string().optional(),
