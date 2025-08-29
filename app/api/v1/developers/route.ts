@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 const createDeveloperSchema = z.object({
-  githubUsername: z.string().min(1),
-  email: z.string().email().optional(),
-  name: z.string().min(1).optional(),
-  avatarUrl: z.string().url().optional(),
+  githubId: z.string().min(1),
+  username: z.string().min(1),
 });
 
 const querySchema = z.object({
@@ -15,69 +16,67 @@ const querySchema = z.object({
   active: z.string().transform(val => val === 'true').optional(),
 });
 
-// Mock data - replace with your database
-let developers = [
-  {
-    id: '1',
-    githubUsername: 'alice-dev',
-    email: 'alice@example.com',
-    name: 'Alice Developer',
-    avatarUrl: 'https://github.com/alice-dev.png',
-    totalEarnings: 2500,
-    activeProjects: 3,
-    totalPRs: 15,
-    averageScore: 8.5,
-    joinedAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: '2',
-    githubUsername: 'bob-coder',
-    email: 'bob@example.com',
-    name: 'Bob Coder',
-    avatarUrl: 'https://github.com/bob-coder.png',
-    totalEarnings: 1800,
-    activeProjects: 2,
-    totalPRs: 12,
-    averageScore: 7.8,
-    joinedAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  }
-];
-
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const { page, limit, search, active } = querySchema.parse(Object.fromEntries(searchParams));
 
-    let filteredDevelopers = developers;
-
-    // Apply filters
+    // Build where clause
+    const where: any = {};
+    
     if (search) {
-      filteredDevelopers = filteredDevelopers.filter(dev =>
-        dev.githubUsername.toLowerCase().includes(search.toLowerCase()) ||
-        dev.name?.toLowerCase().includes(search.toLowerCase()) ||
-        dev.email?.toLowerCase().includes(search.toLowerCase())
-      );
+      where.OR = [
+        { username: { contains: search, mode: 'insensitive' } },
+        { githubId: { contains: search, mode: 'insensitive' } },
+      ];
     }
 
-    if (active !== undefined) {
-      filteredDevelopers = filteredDevelopers.filter(dev => dev.activeProjects > 0);
-    }
+    // Get total count
+    const total = await prisma.developer.count({ where });
 
-    // Apply pagination
-    const startIndex = (page - 1) * limit;
-    const endIndex = startIndex + limit;
-    const paginatedDevelopers = filteredDevelopers.slice(startIndex, endIndex);
+    // Get paginated developers
+    const developers = await prisma.developer.findMany({
+      where,
+      include: {
+        _count: {
+          select: {
+            prs: true,
+            payouts: true,
+          }
+        },
+        payouts: {
+          select: {
+            amount: true,
+            paidAt: true,
+          }
+        }
+      },
+      skip: (page - 1) * limit,
+      take: limit,
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Calculate additional stats
+    const developersWithStats = developers.map(dev => {
+      const totalEarnings = dev.payouts.reduce((sum, payout) => sum + payout.amount, 0);
+      const activeProjects = new Set(dev.payouts.map(p => p.projectId)).size;
+      
+      return {
+        ...dev,
+        totalEarnings,
+        activeProjects,
+        averageScore: dev._count.prs > 0 ? 8.5 : 0, // TODO: Calculate from actual PR scores
+      };
+    });
 
     return NextResponse.json({
       success: true,
-      data: paginatedDevelopers,
+      data: developersWithStats,
       pagination: {
         page,
         limit,
-        total: filteredDevelopers.length,
-        totalPages: Math.ceil(filteredDevelopers.length / limit),
+        total,
+        totalPages: Math.ceil(total / limit),
       }
     });
   } catch (error) {
@@ -88,10 +87,13 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    console.error('Developers fetch error:', error);
     return NextResponse.json(
       { success: false, message: 'Internal server error' },
       { status: 500 }
     );
+  } finally {
+    await prisma.$disconnect();
   }
 }
 
@@ -101,9 +103,9 @@ export async function POST(request: NextRequest) {
     const developerData = createDeveloperSchema.parse(body);
 
     // Check if developer already exists
-    const existingDeveloper = developers.find(
-      dev => dev.githubUsername === developerData.githubUsername
-    );
+    const existingDeveloper = await prisma.developer.findUnique({
+      where: { githubId: developerData.githubId }
+    });
 
     if (existingDeveloper) {
       return NextResponse.json({
@@ -113,18 +115,17 @@ export async function POST(request: NextRequest) {
       }, { status: 409 });
     }
 
-    const newDeveloper = {
-      id: Date.now().toString(),
-      ...developerData,
-      totalEarnings: 0,
-      activeProjects: 0,
-      totalPRs: 0,
-      averageScore: 0,
-      joinedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    developers.push(newDeveloper);
+    const newDeveloper = await prisma.developer.create({
+      data: developerData,
+      include: {
+        _count: {
+          select: {
+            prs: true,
+            payouts: true,
+          }
+        }
+      }
+    });
 
     return NextResponse.json({
       success: true,
@@ -139,9 +140,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    console.error('Developer creation error:', error);
     return NextResponse.json(
       { success: false, message: 'Internal server error' },
       { status: 500 }
     );
+  } finally {
+    await prisma.$disconnect();
   }
 }

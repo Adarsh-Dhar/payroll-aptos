@@ -1,74 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { PrismaClient } from '@prisma/client';
 
-// Mock data - replace with your database
-let developers = [
-  {
-    id: '1',
-    githubUsername: 'alice-dev',
-    email: 'alice@example.com',
-    name: 'Alice Developer',
-    avatarUrl: 'https://github.com/alice-dev.png',
-    totalEarnings: 2500,
-    activeProjects: 3,
-    totalPRs: 15,
-    averageScore: 8.5,
-    joinedAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    skills: ['React', 'Node.js', 'TypeScript', 'Python'],
-    bio: 'Full-stack developer with 5+ years of experience',
-    location: 'San Francisco, CA',
-    githubStats: {
-      followers: 150,
-      following: 80,
-      publicRepos: 25,
-      contributions: 1200,
-    },
-    recentActivity: [
-      {
-        type: 'pr_merged',
-        project: 'DevPayStream Core',
-        date: new Date().toISOString(),
-        amount: 150,
-      },
-      {
-        type: 'pr_reviewed',
-        project: 'API Gateway',
-        date: new Date().toISOString(),
-        amount: 75,
-      }
-    ]
-  },
-  {
-    id: '2',
-    githubUsername: 'bob-coder',
-    email: 'bob@example.com',
-    name: 'Bob Coder',
-    avatarUrl: 'https://github.com/bob-coder.png',
-    totalEarnings: 1800,
-    activeProjects: 2,
-    totalPRs: 12,
-    averageScore: 7.8,
-    joinedAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    skills: ['Java', 'Spring Boot', 'Kubernetes', 'Docker'],
-    bio: 'Backend engineer specializing in microservices',
-    location: 'New York, NY',
-    githubStats: {
-      followers: 89,
-      following: 45,
-      publicRepos: 18,
-      contributions: 850,
-    },
-    recentActivity: [
-      {
-        type: 'pr_merged',
-        project: 'API Gateway',
-        date: new Date().toISOString(),
-        amount: 200,
-      }
-    ]
-  }
-];
+const prisma = new PrismaClient();
 
 export async function GET(
   request: NextRequest,
@@ -76,7 +9,50 @@ export async function GET(
 ) {
   try {
     const { developerId } = params;
-    const developer = developers.find(d => d.id === developerId);
+    const developerIdNum = parseInt(developerId);
+
+    if (isNaN(developerIdNum)) {
+      return NextResponse.json(
+        { success: false, message: 'Invalid developer ID' },
+        { status: 400 }
+      );
+    }
+
+    const developer = await prisma.developer.findUnique({
+      where: { id: developerIdNum },
+      include: {
+        _count: {
+          select: {
+            prs: true,
+            payouts: true,
+          }
+        },
+        prs: {
+          take: 10,
+          orderBy: { createdAt: 'desc' },
+          include: {
+            project: {
+              select: {
+                id: true,
+                name: true,
+              }
+            }
+          }
+        },
+        payouts: {
+          take: 10,
+          orderBy: { paidAt: 'desc' },
+          include: {
+            project: {
+              select: {
+                id: true,
+                name: true,
+              }
+            }
+          }
+        }
+      }
+    });
 
     if (!developer) {
       return NextResponse.json(
@@ -85,14 +61,90 @@ export async function GET(
       );
     }
 
+    // Calculate additional stats
+    const totalEarnings = developer.payouts.reduce((sum, payout) => sum + payout.amount, 0);
+    const activeProjects = new Set(developer.payouts.map(p => p.projectId)).size;
+    const averageScore = developer.prs.length > 0 ? 
+      developer.prs.reduce((sum, pr) => sum + pr.score, 0) / developer.prs.length : 0;
+
+    // Get project breakdown
+    const projectBreakdown = await prisma.project.findMany({
+      where: {
+        pullRequests: {
+          some: {
+            developerId: developerIdNum
+          }
+        }
+      },
+      include: {
+        _count: {
+          select: {
+            pullRequests: {
+              where: {
+                developerId: developerIdNum
+              }
+            },
+            payouts: {
+              where: {
+                developerId: developerIdNum
+              }
+            }
+          }
+        },
+        pullRequests: {
+          where: {
+            developerId: developerIdNum
+          },
+          select: {
+            score: true,
+            amountPaid: true,
+            merged: true,
+          }
+        }
+      }
+    });
+
+    const developerWithStats = {
+      ...developer,
+      totalEarnings,
+      activeProjects,
+      averageScore: Math.round(averageScore * 10) / 10,
+      projectBreakdown: projectBreakdown.map(project => ({
+        id: project.id,
+        name: project.name,
+        totalPRs: project._count.pullRequests,
+        mergedPRs: project.pullRequests.filter(pr => pr.merged).length,
+        totalEarnings: project.pullRequests.reduce((sum, pr) => sum + pr.amountPaid, 0),
+        averageScore: project.pullRequests.length > 0 ? 
+          project.pullRequests.reduce((sum, pr) => sum + pr.score, 0) / project.pullRequests.length : 0,
+      })),
+      recentActivity: [
+        ...developer.prs.slice(0, 5).map(pr => ({
+          type: 'pr_merged',
+          project: pr.project.name,
+          date: pr.createdAt,
+          amount: pr.amountPaid,
+        })),
+        ...developer.payouts.slice(0, 5).map(payout => ({
+          type: 'payout',
+          project: payout.project.name,
+          date: payout.paidAt,
+          amount: payout.amount,
+        }))
+      ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 10)
+    };
+
     return NextResponse.json({
       success: true,
-      data: developer
+      data: developerWithStats
     });
   } catch (error) {
+    console.error('Developer fetch error:', error);
     return NextResponse.json(
       { success: false, message: 'Internal server error' },
       { status: 500 }
     );
+  } finally {
+    await prisma.$disconnect();
   }
 }

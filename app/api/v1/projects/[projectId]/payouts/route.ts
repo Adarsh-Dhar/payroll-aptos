@@ -1,70 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 const createPayoutSchema = z.object({
-  developerId: z.string().min(1),
+  developerId: z.number().int().positive(),
   amount: z.number().positive(),
-  description: z.string().optional(),
-  type: z.enum(['pr_reward', 'bonus', 'manual']).default('pr_reward'),
-  status: z.enum(['pending', 'processing', 'completed', 'failed']).default('pending'),
-  reference: z.string().optional(), // PR number or other reference
 });
 
 const querySchema = z.object({
   page: z.string().transform(Number).pipe(z.number().min(1)).default(1),
   limit: z.string().transform(Number).pipe(z.number().min(1).max(100)).default(20),
-  status: z.enum(['pending', 'processing', 'completed', 'failed']).optional(),
-  developerId: z.string().optional(),
+  developerId: z.string().transform(Number).optional(),
   startDate: z.string().optional(),
   endDate: z.string().optional(),
 });
-
-// Mock data - replace with your database
-let payouts = [
-  {
-    id: '1',
-    projectId: '1',
-    developerId: '1',
-    developerName: 'Alice Developer',
-    amount: 150,
-    description: 'Payment for PR #42 - Add payment processing feature',
-    type: 'pr_reward',
-    status: 'completed',
-    reference: 'PR #42',
-    processedAt: new Date().toISOString(),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    transactionId: 'tx_123456789',
-  },
-  {
-    id: '2',
-    projectId: '2',
-    developerId: '1',
-    developerName: 'Alice Developer',
-    amount: 200,
-    description: 'Payment for PR #15 - Implement rate limiting',
-    type: 'pr_reward',
-    status: 'completed',
-    reference: 'PR #15',
-    processedAt: new Date().toISOString(),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    transactionId: 'tx_987654321',
-  },
-  {
-    id: '3',
-    projectId: '1',
-    developerId: '2',
-    developerName: 'Bob Coder',
-    amount: 75,
-    description: 'Bonus for code review contributions',
-    type: 'bonus',
-    status: 'pending',
-    reference: 'Review Bonus',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  }
-];
 
 export async function GET(
   request: NextRequest,
@@ -72,54 +23,88 @@ export async function GET(
 ) {
   try {
     const { projectId } = params;
+    const projectIdNum = parseInt(projectId);
     const { searchParams } = new URL(request.url);
-    const { page, limit, status, developerId, startDate, endDate } = querySchema.parse(Object.fromEntries(searchParams));
+    const { page, limit, developerId, startDate, endDate } = querySchema.parse(Object.fromEntries(searchParams));
 
-    let filteredPayouts = payouts.filter(payout => payout.projectId === projectId);
-
-    // Apply filters
-    if (status) {
-      filteredPayouts = filteredPayouts.filter(payout => payout.status === status);
+    if (isNaN(projectIdNum)) {
+      return NextResponse.json(
+        { success: false, message: 'Invalid project ID' },
+        { status: 400 }
+      );
     }
 
+    // Verify project exists
+    const project = await prisma.project.findUnique({
+      where: { id: projectIdNum }
+    });
+
+    if (!project) {
+      return NextResponse.json(
+        { success: false, message: 'Project not found' },
+        { status: 404 }
+      );
+    }
+
+    // Build where clause
+    const where: any = { projectId: projectIdNum };
+    
     if (developerId) {
-      filteredPayouts = filteredPayouts.filter(payout => payout.developerId === developerId);
+      where.developerId = developerId;
     }
 
     if (startDate || endDate) {
-      filteredPayouts = filteredPayouts.filter(payout => {
-        const payoutDate = new Date(payout.createdAt);
-        if (startDate && payoutDate < new Date(startDate)) return false;
-        if (endDate && payoutDate > new Date(endDate)) return false;
-        return true;
-      });
+      where.paidAt = {};
+      if (startDate) {
+        where.paidAt.gte = new Date(startDate);
+      }
+      if (endDate) {
+        where.paidAt.lte = new Date(endDate);
+      }
     }
 
-    // Apply pagination
-    const startIndex = (page - 1) * limit;
-    const endIndex = startIndex + limit;
-    const paginatedPayouts = filteredPayouts.slice(startIndex, endIndex);
+    // Get total count
+    const total = await prisma.payout.count({ where });
+
+    // Get paginated payouts
+    const payouts = await prisma.payout.findMany({
+      where,
+      include: {
+        developer: {
+          select: {
+            id: true,
+            username: true,
+            githubId: true,
+          }
+        },
+        project: {
+          select: {
+            id: true,
+            name: true,
+          }
+        }
+      },
+      skip: (page - 1) * limit,
+      take: limit,
+      orderBy: { paidAt: 'desc' },
+    });
 
     // Calculate summary
-    const totalAmount = filteredPayouts.reduce((sum, payout) => sum + payout.amount, 0);
-    const completedAmount = filteredPayouts
-      .filter(payout => payout.status === 'completed')
-      .reduce((sum, payout) => sum + payout.amount, 0);
+    const totalAmount = payouts.reduce((sum, payout) => sum + payout.amount, 0);
 
     return NextResponse.json({
       success: true,
-      data: paginatedPayouts,
+      data: payouts,
       summary: {
-        totalPayouts: filteredPayouts.length,
+        totalPayouts: total,
         totalAmount,
-        completedAmount,
-        pendingAmount: totalAmount - completedAmount,
+        averagePayout: total > 0 ? totalAmount / total : 0,
       },
       pagination: {
         page,
         limit,
-        total: filteredPayouts.length,
-        totalPages: Math.ceil(filteredPayouts.length / limit),
+        total,
+        totalPages: Math.ceil(total / limit),
       }
     });
   } catch (error) {
@@ -130,10 +115,13 @@ export async function GET(
       );
     }
 
+    console.error('Payouts fetch error:', error);
     return NextResponse.json(
       { success: false, message: 'Internal server error' },
       { status: 500 }
     );
+  } finally {
+    await prisma.$disconnect();
   }
 }
 
@@ -143,19 +131,62 @@ export async function POST(
 ) {
   try {
     const { projectId } = params;
+    const projectIdNum = parseInt(projectId);
     const body = await request.json();
     const payoutData = createPayoutSchema.parse(body);
 
-    const newPayout = {
-      id: Date.now().toString(),
-      projectId,
-      developerName: 'Developer', // TODO: Fetch from developer data
-      ...payoutData,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+    if (isNaN(projectIdNum)) {
+      return NextResponse.json(
+        { success: false, message: 'Invalid project ID' },
+        { status: 400 }
+      );
+    }
 
-    payouts.push(newPayout);
+    // Verify project exists
+    const project = await prisma.project.findUnique({
+      where: { id: projectIdNum }
+    });
+
+    if (!project) {
+      return NextResponse.json(
+        { success: false, message: 'Project not found' },
+        { status: 404 }
+      );
+    }
+
+    // Verify developer exists
+    const developer = await prisma.developer.findUnique({
+      where: { id: payoutData.developerId }
+    });
+
+    if (!developer) {
+      return NextResponse.json(
+        { success: false, message: 'Developer not found' },
+        { status: 404 }
+      );
+    }
+
+    const newPayout = await prisma.payout.create({
+      data: {
+        ...payoutData,
+        projectId: projectIdNum,
+      },
+      include: {
+        developer: {
+          select: {
+            id: true,
+            username: true,
+            githubId: true,
+          }
+        },
+        project: {
+          select: {
+            id: true,
+            name: true,
+          }
+        }
+      }
+    });
 
     return NextResponse.json({
       success: true,
@@ -170,9 +201,12 @@ export async function POST(
       );
     }
 
+    console.error('Payout creation error:', error);
     return NextResponse.json(
       { success: false, message: 'Internal server error' },
       { status: 500 }
     );
+  } finally {
+    await prisma.$disconnect();
   }
 }

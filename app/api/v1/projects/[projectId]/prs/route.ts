@@ -1,92 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 const createPRSchema = z.object({
-  number: z.number().positive(),
+  prNumber: z.number().positive(),
   title: z.string().min(1),
   description: z.string().optional(),
-  author: z.string().min(1),
-  githubUrl: z.string().url(),
-  state: z.enum(['open', 'closed', 'merged']).default('open'),
-  baseBranch: z.string().default('main'),
-  headBranch: z.string(),
-  additions: z.number().min(0).optional(),
-  deletions: z.number().min(0).optional(),
-  changedFiles: z.number().min(0).optional(),
-  reviewScore: z.number().min(0).max(10).optional(),
-  mergeDate: z.string().optional(),
+  additions: z.number().min(0),
+  deletions: z.number().min(0),
+  hasTests: z.boolean().default(false),
+  linkedIssue: z.string().optional(),
+  merged: z.boolean().default(false),
+  score: z.number().min(0).max(10),
+  amountPaid: z.number().min(0).default(0),
+  developerId: z.number().int().positive(),
 });
 
 const querySchema = z.object({
   page: z.string().transform(Number).pipe(z.number().min(1)).default(1),
   limit: z.string().transform(Number).pipe(z.number().min(1).max(100)).default(20),
-  state: z.enum(['open', 'closed', 'merged']).optional(),
-  author: z.string().optional(),
+  merged: z.string().transform(val => val === 'true').optional(),
+  developerId: z.string().transform(Number).optional(),
   search: z.string().optional(),
 });
-
-// Mock data - replace with your database
-let pullRequests = [
-  {
-    id: '1',
-    projectId: '1',
-    number: 42,
-    title: 'Add payment processing feature',
-    description: 'Implements secure payment processing with Stripe integration',
-    author: 'alice-dev',
-    githubUrl: 'https://github.com/devpaystream/core/pull/42',
-    state: 'merged',
-    baseBranch: 'main',
-    headBranch: 'feature/payment-processing',
-    additions: 450,
-    deletions: 23,
-    changedFiles: 12,
-    reviewScore: 9.2,
-    mergeDate: new Date().toISOString(),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    earnings: 150,
-  },
-  {
-    id: '2',
-    projectId: '1',
-    number: 43,
-    title: 'Fix authentication bug',
-    description: 'Resolves issue with JWT token validation',
-    author: 'bob-coder',
-    githubUrl: 'https://github.com/devpaystream/core/pull/43',
-    state: 'open',
-    baseBranch: 'main',
-    headBranch: 'fix/auth-bug',
-    additions: 15,
-    deletions: 8,
-    changedFiles: 3,
-    reviewScore: 7.5,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    earnings: 0,
-  },
-  {
-    id: '3',
-    projectId: '2',
-    number: 15,
-    title: 'Implement rate limiting',
-    description: 'Adds rate limiting middleware for API endpoints',
-    author: 'alice-dev',
-    githubUrl: 'https://github.com/devpaystream/gateway/pull/15',
-    state: 'merged',
-    baseBranch: 'main',
-    headBranch: 'feature/rate-limiting',
-    additions: 320,
-    deletions: 45,
-    changedFiles: 8,
-    reviewScore: 8.8,
-    mergeDate: new Date().toISOString(),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    earnings: 200,
-  }
-];
 
 export async function GET(
   request: NextRequest,
@@ -94,40 +32,81 @@ export async function GET(
 ) {
   try {
     const { projectId } = params;
+    const projectIdNum = parseInt(projectId);
     const { searchParams } = new URL(request.url);
-    const { page, limit, state, author, search } = querySchema.parse(Object.fromEntries(searchParams));
+    const { page, limit, merged, developerId, search } = querySchema.parse(Object.fromEntries(searchParams));
 
-    let filteredPRs = pullRequests.filter(pr => pr.projectId === projectId);
-
-    // Apply filters
-    if (state) {
-      filteredPRs = filteredPRs.filter(pr => pr.state === state);
-    }
-
-    if (author) {
-      filteredPRs = filteredPRs.filter(pr => pr.author === author);
-    }
-
-    if (search) {
-      filteredPRs = filteredPRs.filter(pr =>
-        pr.title.toLowerCase().includes(search.toLowerCase()) ||
-        pr.description?.toLowerCase().includes(search.toLowerCase())
+    if (isNaN(projectIdNum)) {
+      return NextResponse.json(
+        { success: false, message: 'Invalid project ID' },
+        { status: 400 }
       );
     }
 
-    // Apply pagination
-    const startIndex = (page - 1) * limit;
-    const endIndex = startIndex + limit;
-    const paginatedPRs = filteredPRs.slice(startIndex, endIndex);
+    // Verify project exists
+    const project = await prisma.project.findUnique({
+      where: { id: projectIdNum }
+    });
+
+    if (!project) {
+      return NextResponse.json(
+        { success: false, message: 'Project not found' },
+        { status: 404 }
+      );
+    }
+
+    // Build where clause
+    const where: any = { projectId: projectIdNum };
+    
+    if (merged !== undefined) {
+      where.merged = merged;
+    }
+
+    if (developerId) {
+      where.developerId = developerId;
+    }
+
+    if (search) {
+      where.OR = [
+        { title: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    // Get total count
+    const total = await prisma.pullRequest.count({ where });
+
+    // Get paginated PRs
+    const pullRequests = await prisma.pullRequest.findMany({
+      where,
+      include: {
+        developer: {
+          select: {
+            id: true,
+            username: true,
+            githubId: true,
+          }
+        },
+        project: {
+          select: {
+            id: true,
+            name: true,
+          }
+        }
+      },
+      skip: (page - 1) * limit,
+      take: limit,
+      orderBy: { createdAt: 'desc' },
+    });
 
     return NextResponse.json({
       success: true,
-      data: paginatedPRs,
+      data: pullRequests,
       pagination: {
         page,
         limit,
-        total: filteredPRs.length,
-        totalPages: Math.ceil(filteredPRs.length / limit),
+        total,
+        totalPages: Math.ceil(total / limit),
       }
     });
   } catch (error) {
@@ -138,10 +117,13 @@ export async function GET(
       );
     }
 
+    console.error('PRs fetch error:', error);
     return NextResponse.json(
       { success: false, message: 'Internal server error' },
       { status: 500 }
     );
+  } finally {
+    await prisma.$disconnect();
   }
 }
 
@@ -151,13 +133,50 @@ export async function POST(
 ) {
   try {
     const { projectId } = params;
+    const projectIdNum = parseInt(projectId);
     const body = await request.json();
     const prData = createPRSchema.parse(body);
 
+    if (isNaN(projectIdNum)) {
+      return NextResponse.json(
+        { success: false, message: 'Invalid project ID' },
+        { status: 400 }
+      );
+    }
+
+    // Verify project exists
+    const project = await prisma.project.findUnique({
+      where: { id: projectIdNum }
+    });
+
+    if (!project) {
+      return NextResponse.json(
+        { success: false, message: 'Project not found' },
+        { status: 404 }
+      );
+    }
+
+    // Verify developer exists
+    const developer = await prisma.developer.findUnique({
+      where: { id: prData.developerId }
+    });
+
+    if (!developer) {
+      return NextResponse.json(
+        { success: false, message: 'Developer not found' },
+        { status: 404 }
+      );
+    }
+
     // Check if PR already exists
-    const existingPR = pullRequests.find(
-      pr => pr.projectId === projectId && pr.number === prData.number
-    );
+    const existingPR = await prisma.pullRequest.findUnique({
+      where: {
+        projectId_prNumber: {
+          projectId: projectIdNum,
+          prNumber: prData.prNumber
+        }
+      }
+    });
 
     if (existingPR) {
       return NextResponse.json({
@@ -167,16 +186,27 @@ export async function POST(
       }, { status: 409 });
     }
 
-    const newPR = {
-      id: Date.now().toString(),
-      projectId,
-      ...prData,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      earnings: 0,
-    };
-
-    pullRequests.push(newPR);
+    const newPR = await prisma.pullRequest.create({
+      data: {
+        ...prData,
+        projectId: projectIdNum,
+      },
+      include: {
+        developer: {
+          select: {
+            id: true,
+            username: true,
+            githubId: true,
+          }
+        },
+        project: {
+          select: {
+            id: true,
+            name: true,
+          }
+        }
+      }
+    });
 
     return NextResponse.json({
       success: true,
@@ -191,9 +221,12 @@ export async function POST(
       );
     }
 
+    console.error('PR creation error:', error);
     return NextResponse.json(
       { success: false, message: 'Internal server error' },
       { status: 500 }
     );
+  } finally {
+    await prisma.$disconnect();
   }
 }

@@ -1,77 +1,77 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 const createProjectSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
-  githubUrl: z.string().url().optional(),
+  repoUrl: z.string().url(),
   budget: z.number().positive(),
-  active: z.boolean().default(true),
+  adminId: z.number().int().positive(),
 });
 
 const querySchema = z.object({
   page: z.string().transform(Number).pipe(z.number().min(1)).default(1),
   limit: z.string().transform(Number).pipe(z.number().min(1).max(100)).default(20),
   search: z.string().optional(),
-  active: z.string().transform(val => val === 'true').optional(),
+  adminId: z.string().transform(Number).optional(),
 });
-
-// Mock data - replace with your database
-let projects = [
-  {
-    id: '1',
-    name: 'DevPayStream Core',
-    description: 'Main payment processing system',
-    githubUrl: 'https://github.com/devpaystream/core',
-    budget: 10000,
-    active: true,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: '2',
-    name: 'API Gateway',
-    description: 'API management and routing',
-    githubUrl: 'https://github.com/devpaystream/gateway',
-    budget: 5000,
-    active: true,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  }
-];
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const { page, limit, search, active } = querySchema.parse(Object.fromEntries(searchParams));
+    const { page, limit, search, adminId } = querySchema.parse(Object.fromEntries(searchParams));
 
-    let filteredProjects = projects;
-
-    // Apply filters
+    // Build where clause
+    const where: any = {};
+    
     if (search) {
-      filteredProjects = filteredProjects.filter(project =>
-        project.name.toLowerCase().includes(search.toLowerCase()) ||
-        project.description?.toLowerCase().includes(search.toLowerCase())
-      );
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
+      ];
     }
 
-    if (active !== undefined) {
-      filteredProjects = filteredProjects.filter(project => project.active === active);
+    if (adminId) {
+      where.adminId = adminId;
     }
 
-    // Apply pagination
-    const startIndex = (page - 1) * limit;
-    const endIndex = startIndex + limit;
-    const paginatedProjects = filteredProjects.slice(startIndex, endIndex);
+    // Get total count
+    const total = await prisma.project.count({ where });
+
+    // Get paginated projects
+    const projects = await prisma.project.findMany({
+      where,
+      include: {
+        admin: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          }
+        },
+        _count: {
+          select: {
+            pullRequests: true,
+            payouts: true,
+          }
+        }
+      },
+      skip: (page - 1) * limit,
+      take: limit,
+      orderBy: { createdAt: 'desc' },
+    });
 
     return NextResponse.json({
       success: true,
-      data: paginatedProjects,
+      data: projects,
       pagination: {
         page,
         limit,
-        total: filteredProjects.length,
-        totalPages: Math.ceil(filteredProjects.length / limit),
+        total,
+        totalPages: Math.ceil(total / limit),
       }
     });
   } catch (error) {
@@ -82,10 +82,13 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    console.error('Projects fetch error:', error);
     return NextResponse.json(
       { success: false, message: 'Internal server error' },
       { status: 500 }
     );
+  } finally {
+    await prisma.$disconnect();
   }
 }
 
@@ -95,14 +98,30 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const projectData = createProjectSchema.parse(body);
 
-    const newProject = {
-      id: Date.now().toString(),
-      ...projectData,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+    // Verify admin exists
+    const admin = await prisma.admin.findUnique({
+      where: { id: projectData.adminId }
+    });
 
-    projects.push(newProject);
+    if (!admin) {
+      return NextResponse.json(
+        { success: false, message: 'Admin not found' },
+        { status: 404 }
+      );
+    }
+
+    const newProject = await prisma.project.create({
+      data: projectData,
+      include: {
+        admin: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          }
+        }
+      }
+    });
 
     return NextResponse.json({
       success: true,
@@ -117,9 +136,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    console.error('Project creation error:', error);
     return NextResponse.json(
       { success: false, message: 'Internal server error' },
       { status: 500 }
     );
+  } finally {
+    await prisma.$disconnect();
   }
 }

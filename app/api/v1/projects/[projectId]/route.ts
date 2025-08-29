@@ -1,37 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 const updateProjectSchema = z.object({
   name: z.string().min(1).optional(),
   description: z.string().optional(),
-  githubUrl: z.string().url().optional(),
+  repoUrl: z.string().url().optional(),
   budget: z.number().positive().optional(),
-  active: z.boolean().optional(),
+  adminId: z.number().int().positive().optional(),
 });
-
-// Mock data - replace with your database
-let projects = [
-  {
-    id: '1',
-    name: 'DevPayStream Core',
-    description: 'Main payment processing system',
-    githubUrl: 'https://github.com/devpaystream/core',
-    budget: 10000,
-    active: true,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: '2',
-    name: 'API Gateway',
-    description: 'API management and routing',
-    githubUrl: 'https://github.com/devpaystream/gateway',
-    budget: 5000,
-    active: true,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  }
-];
 
 export async function GET(
   request: NextRequest,
@@ -39,7 +18,57 @@ export async function GET(
 ) {
   try {
     const { projectId } = params;
-    const project = projects.find(p => p.id === projectId);
+    const projectIdNum = parseInt(projectId);
+
+    if (isNaN(projectIdNum)) {
+      return NextResponse.json(
+        { success: false, message: 'Invalid project ID' },
+        { status: 400 }
+      );
+    }
+
+    const project = await prisma.project.findUnique({
+      where: { id: projectIdNum },
+      include: {
+        admin: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          }
+        },
+        _count: {
+          select: {
+            pullRequests: true,
+            payouts: true,
+          }
+        },
+        pullRequests: {
+          take: 5,
+          orderBy: { createdAt: 'desc' },
+          include: {
+            developer: {
+              select: {
+                id: true,
+                username: true,
+              }
+            }
+          }
+        },
+        payouts: {
+          take: 5,
+          orderBy: { paidAt: 'desc' },
+          include: {
+            developer: {
+              select: {
+                id: true,
+                username: true,
+              }
+            }
+          }
+        }
+      }
+    });
 
     if (!project) {
       return NextResponse.json(
@@ -53,10 +82,13 @@ export async function GET(
       data: project
     });
   } catch (error) {
+    console.error('Project fetch error:', error);
     return NextResponse.json(
       { success: false, message: 'Internal server error' },
       { status: 500 }
     );
+  } finally {
+    await prisma.$disconnect();
   }
 }
 
@@ -67,26 +99,60 @@ export async function PUT(
   try {
     // TODO: Implement admin authentication middleware
     const { projectId } = params;
+    const projectIdNum = parseInt(projectId);
     const body = await request.json();
     const updateData = updateProjectSchema.parse(body);
 
-    const projectIndex = projects.findIndex(p => p.id === projectId);
-    if (projectIndex === -1) {
+    if (isNaN(projectIdNum)) {
+      return NextResponse.json(
+        { success: false, message: 'Invalid project ID' },
+        { status: 400 }
+      );
+    }
+
+    // Check if project exists
+    const existingProject = await prisma.project.findUnique({
+      where: { id: projectIdNum }
+    });
+
+    if (!existingProject) {
       return NextResponse.json(
         { success: false, message: 'Project not found' },
         { status: 404 }
       );
     }
 
-    projects[projectIndex] = {
-      ...projects[projectIndex],
-      ...updateData,
-      updatedAt: new Date().toISOString(),
-    };
+    // If adminId is being updated, verify the new admin exists
+    if (updateData.adminId) {
+      const admin = await prisma.admin.findUnique({
+        where: { id: updateData.adminId }
+      });
+
+      if (!admin) {
+        return NextResponse.json(
+          { success: false, message: 'Admin not found' },
+          { status: 404 }
+        );
+      }
+    }
+
+    const updatedProject = await prisma.project.update({
+      where: { id: projectIdNum },
+      data: updateData,
+      include: {
+        admin: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          }
+        }
+      }
+    });
 
     return NextResponse.json({
       success: true,
-      data: projects[projectIndex],
+      data: updatedProject,
       message: 'Project updated successfully'
     });
   } catch (error) {
@@ -97,10 +163,13 @@ export async function PUT(
       );
     }
 
+    console.error('Project update error:', error);
     return NextResponse.json(
       { success: false, message: 'Internal server error' },
       { status: 500 }
     );
+  } finally {
+    await prisma.$disconnect();
   }
 }
 
@@ -111,27 +180,53 @@ export async function DELETE(
   try {
     // TODO: Implement admin authentication middleware
     const { projectId } = params;
-    const projectIndex = projects.findIndex(p => p.id === projectId);
+    const projectIdNum = parseInt(projectId);
 
-    if (projectIndex === -1) {
+    if (isNaN(projectIdNum)) {
+      return NextResponse.json(
+        { success: false, message: 'Invalid project ID' },
+        { status: 400 }
+      );
+    }
+
+    // Check if project exists
+    const project = await prisma.project.findUnique({
+      where: { id: projectIdNum }
+    });
+
+    if (!project) {
       return NextResponse.json(
         { success: false, message: 'Project not found' },
         { status: 404 }
       );
     }
 
-    const deletedProject = projects[projectIndex];
-    projects.splice(projectIndex, 1);
+    // Delete related records first (due to foreign key constraints)
+    await prisma.payout.deleteMany({
+      where: { projectId: projectIdNum }
+    });
+
+    await prisma.pullRequest.deleteMany({
+      where: { projectId: projectIdNum }
+    });
+
+    // Delete the project
+    await prisma.project.delete({
+      where: { id: projectIdNum }
+    });
 
     return NextResponse.json({
       success: true,
       message: 'Project deleted successfully',
-      data: deletedProject
+      data: project
     });
   } catch (error) {
+    console.error('Project deletion error:', error);
     return NextResponse.json(
       { success: false, message: 'Internal server error' },
       { status: 500 }
     );
+  } finally {
+    await prisma.$disconnect();
   }
 }
