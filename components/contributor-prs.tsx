@@ -15,7 +15,7 @@ import Link from 'next/link'
 import ClaimRewardDialog from './claim-reward-dialog'
 
 export type ContributorPR = {
-  id: number
+  id: string | number // Can be string (GitHub PRs) or number (database PRs)
   prNumber: number
   title: string
   description: string
@@ -29,10 +29,14 @@ export type ContributorPR = {
   bountyAmount: number
   bountyClaimed: boolean
   bountyClaimedAt: string | null
+  bountyClaimedBy: number | null
+  bountyClaimedAmount: number | null
   developerId: number
   projectId: number
   createdAt: string
   updatedAt: string
+  commits: any[] // Add commits field for bounty calculation
+  repository: string // Add repository field for GitHub repository name (owner/repo format)
   Project: {
     id: number
     name: string
@@ -75,6 +79,7 @@ export default function ContributorPRs() {
 
   const [claimRewardDialogOpen, setClaimRewardDialogOpen] = useState(false)
   const [selectedPR, setSelectedPR] = useState<ContributorPR | null>(null)
+  const [claimedPRs, setClaimedPRs] = useState<Set<number>>(new Set())
 
   const fetchPRs = async () => {
     try {
@@ -192,11 +197,36 @@ export default function ContributorPRs() {
     if (!pr || !pr.Project || !pr.Project.id) return projects
     
     // Check if we already have this project in our array
-    if (!projects.find(p => p.id === pr.projectId)) {
+    if (!projects.find(p => p.id === pr.Project.id)) {
       projects.push(pr.Project)
     }
     return projects
   }, [] as typeof prsData.data[0]['Project'][]) || []
+
+  // Debug logging for duplicate detection
+  console.log('=== DEBUG: Projects and PRs ===')
+  console.log('Total PRs:', prsData?.data?.length || 0)
+  console.log('Unique Projects:', uniqueProjects.length)
+  console.log('Project IDs:', uniqueProjects.map(p => p.id))
+  
+  // Check for duplicate project IDs
+  const projectIds = uniqueProjects.map(p => p.id)
+  const uniqueProjectIds = [...new Set(projectIds)]
+  if (projectIds.length !== uniqueProjectIds.length) {
+    console.warn('⚠️ Duplicate project IDs detected!')
+    const duplicates = projectIds.filter((id, index) => projectIds.indexOf(id) !== index)
+    console.warn('Duplicate project IDs:', duplicates)
+  }
+  
+  // Check for duplicate PR IDs
+  const prIds = prsData?.data?.map(pr => pr.id) || []
+  const uniquePrIds = [...new Set(prIds)]
+  if (prIds.length !== uniquePrIds.length) {
+    console.warn('⚠️ Duplicate PR IDs detected!')
+    const duplicates = prIds.filter((id, index) => prIds.indexOf(id) !== index)
+    console.warn('Duplicate PR IDs:', duplicates)
+    console.warn('All PR IDs:', prIds)
+  }
 
   const handleClaimBounty = async (pr: ContributorPR) => {
     if (!pr.merged || pr.bountyClaimed) return
@@ -204,6 +234,31 @@ export default function ContributorPRs() {
     // Open the claim reward dialog instead of making API call directly
     setSelectedPR(pr)
     setClaimRewardDialogOpen(true)
+  }
+
+  const handleBountyClaimed = (prNumber: number, bountyAmount: number) => {
+    // Add the PR to the claimed set
+    setClaimedPRs(prev => new Set([...prev, prNumber]))
+    
+    // Update the PR data to mark it as claimed
+    setPrsData(prev => {
+      if (!prev?.data) return prev
+      
+      return {
+        ...prev,
+        data: prev.data.map(pr => 
+          pr.prNumber === prNumber 
+            ? { 
+                ...pr, 
+                bountyClaimed: true, 
+                bountyClaimedAmount: bountyAmount,
+                bountyClaimedAt: new Date().toISOString(),
+                amountPaid: bountyAmount
+              }
+            : pr
+        )
+      }
+    })
   }
 
   return (
@@ -386,8 +441,8 @@ export default function ContributorPRs() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Projects</SelectItem>
-                  {uniqueProjects.filter(project => project && project.id && project.name).map((project) => (
-                    <SelectItem key={project.id} value={project.id.toString()}>
+                  {uniqueProjects.filter(project => project && project.id && project.name).map((project, index) => (
+                    <SelectItem key={`project-${project.id}-${index}`} value={project.id.toString()}>
                       {project.name}
                     </SelectItem>
                   ))}
@@ -423,7 +478,7 @@ export default function ContributorPRs() {
                 ) : (
                   filteredPRs.map((pr, idx) => (
                     <motion.tr
-                      key={pr.id}
+                      key={`${pr.id}-${pr.prNumber}-${pr.Project?.name || 'unknown'}`}
                       initial={{ opacity: 0, y: 4 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: idx * 0.03 }}
@@ -475,8 +530,13 @@ export default function ContributorPRs() {
                       <TableCell>
                         <div className="space-y-1">
                           {pr.bountyClaimed ? (
-                            <div className="text-green-600 font-medium">
-                              ${(pr.bountyAmount || 0).toLocaleString()} Claimed
+                            <div className="space-y-1">
+                              <div className="text-green-600 font-medium">
+                                ${(pr.bountyAmount || 0).toLocaleString()} Claimed
+                              </div>
+                              <div className="text-xs text-green-600">
+                                ✓ Bounty claimed successfully
+                              </div>
                             </div>
                           ) : pr.merged ? (
                             <div className="space-y-1">
@@ -495,8 +555,8 @@ export default function ContributorPRs() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div className="flex flex-col gap-2">
-                          {pr.merged && !pr.bountyClaimed ? (
+                                                <div className="flex flex-col gap-2">
+                          {pr.merged && !pr.bountyClaimed && !claimedPRs.has(pr.prNumber) ? (
                             <Button
                               onClick={() => handleClaimBounty(pr)}
                               size="sm"
@@ -507,12 +567,17 @@ export default function ContributorPRs() {
                                 Claim Bounty
                               </div>
                             </Button>
-                          ) : pr.bountyClaimed ? (
-                            <Badge variant="outline" className="text-green-600 border-green-600">
-                              ✓ Claimed
-                            </Badge>
+                          ) : (pr.bountyClaimed || claimedPRs.has(pr.prNumber)) ? (
+                            <div className="space-y-1">
+                              <Badge variant="outline" className="text-green-600 border-green-600">
+                                ✓ Claimed
+                              </Badge>
+                                                              <div className="text-xs text-muted-foreground text-center">
+                                  {pr.bountyClaimedAmount ? `$${pr.bountyClaimedAmount}` : (pr.bountyAmount ? `$${pr.bountyAmount}` : 'Already claimed')}
+                                </div>
+                            </div>
                           ) : (
-                                                        <Button
+                            <Button
                               onClick={() => handleClaimBounty(pr)}
                               disabled={!pr.merged}
                               size="sm"
@@ -554,8 +619,9 @@ export default function ContributorPRs() {
             setClaimRewardDialogOpen(false)
             setSelectedPR(null)
           }}
+          onBountyClaimed={handleBountyClaimed}
           pr={{
-            id: selectedPR.id,
+            id: typeof selectedPR.id === 'string' ? parseInt(selectedPR.id) || 0 : selectedPR.id,
             prNumber: selectedPR.prNumber,
             title: selectedPR.title,
             repository: selectedPR.Project.name, // Use project name as repository

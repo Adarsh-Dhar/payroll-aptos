@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '../../../auth/[...nextauth]/route'
+import { PrismaClient } from '@prisma/client'
 
 export async function GET(request: NextRequest) {
   try {
@@ -149,6 +150,52 @@ export async function GET(request: NextRequest) {
       'Project-S' // Also check for just the project name
     ];
     
+    // Check database for existing claimed PRs to merge with GitHub data
+    let existingPRs: any[] = [];
+    try {
+      const prisma = new PrismaClient();
+      existingPRs = await prisma.pullRequest.findMany({
+        where: {
+          OR: githubData.items.map((item: any) => {
+            const repoUrlParts = item.repository_url.split('/');
+            const repoOwner = repoUrlParts[repoUrlParts.length - 2];
+            const repoName = repoUrlParts[repoUrlParts.length - 1];
+            const repoFullName = `${repoOwner}/${repoName}`;
+            return {
+              AND: [
+                { prNumber: item.number },
+                {
+                  OR: [
+                    { linkedIssue: { contains: repoFullName } },
+                    { title: { contains: repoFullName } },
+                    { Project: { name: { contains: repoFullName } } }
+                  ]
+                }
+              ]
+            };
+          })
+        },
+        select: {
+          prNumber: true,
+          bountyClaimed: true,
+          bountyClaimedAt: true,
+          amountPaid: true,
+          Project: {
+            select: {
+              id: true,
+              name: true,
+              repoUrl: true,
+              lowestBounty: true,
+              highestBounty: true,
+            }
+          }
+        }
+      });
+      await prisma.$disconnect();
+    } catch (error) {
+      console.log('Failed to fetch existing PRs from database:', error);
+    }
+
     // Transform GitHub data to match our expected format
     const transformedPRs = githubData.items.map((item: any, index: number) => {
       // Extract repository information from the repository_url
@@ -217,7 +264,7 @@ export async function GET(request: NextRequest) {
       }
       
       const transformed = {
-        id: index + 1, // Generate sequential ID since GitHub doesn't provide one
+        id: `github-${item.id}-${index}`, // Use GitHub PR ID + index for unique ID
         prNumber: item.number,
         title: item.title,
         description: item.body || '',
@@ -229,12 +276,15 @@ export async function GET(request: NextRequest) {
         score: 0, // Would need additional logic to calculate
         amountPaid: 0, // Not applicable for GitHub data
         bountyAmount: bountyAmount, // Will be calculated based on project bounty settings
-        bountyClaimed: false, // Not applicable for GitHub data
-        bountyClaimedAt: null, // Not applicable for GitHub data
+        bountyClaimed: false, // Will be checked from database
+        bountyClaimedAt: null, // Will be checked from database
+        bountyClaimedBy: null, // Will be checked from database
+        bountyClaimedAmount: null, // Will be checked from database
         developerId: 1, // Default value
         projectId: 1, // Default value
         createdAt: item.created_at,
         updatedAt: item.updated_at,
+        repository: repoFullName, // Add repository field with owner/repo format
         Project: {
           id: 1,
           name: repoFullName,
@@ -298,6 +348,33 @@ export async function GET(request: NextRequest) {
         console.log(`Repository ${repoFullName} is not a bounty-enabled project`)
       }
       
+      // Check if this PR exists in our database and merge the claimed status
+      const existingPR = existingPRs.find(epr => epr.prNumber === item.number);
+      if (existingPR) {
+        transformed.bountyClaimed = existingPR.bountyClaimed;
+        transformed.bountyClaimedAt = existingPR.bountyClaimedAt;
+        transformed.bountyClaimedBy = null; // Will be set when claimed
+        transformed.bountyClaimedAmount = existingPR.amountPaid || null; // Use amountPaid as claimed amount
+        transformed.amountPaid = existingPR.amountPaid;
+        
+        // Use project info from database if available
+        if (existingPR.Project) {
+          transformed.Project = {
+            id: existingPR.Project.id,
+            name: existingPR.Project.name,
+            repoUrl: existingPR.Project.repoUrl,
+            lowestBounty: existingPR.Project.lowestBounty || 100,
+            highestBounty: existingPR.Project.highestBounty || 1000
+          };
+        }
+        
+        // IMPORTANT: Never overwrite the repository field with database values
+        // Keep the original GitHub repository information for API calls
+        console.log(`PR ${item.number} - GitHub repo: ${transformed.repository}, Database project: ${existingPR.Project?.name || 'none'}`);
+        
+        console.log(`PR ${item.number} found in database - Claimed: ${existingPR.bountyClaimed}, Amount: $${existingPR.amountPaid}`);
+      }
+      
       // Log the project ID and PR number that will be used for bounty claims
       console.log(`This PR will use Project ID: ${transformed.projectId}, PR Number: ${transformed.prNumber}`)
       
@@ -308,6 +385,8 @@ export async function GET(request: NextRequest) {
       console.log(`  - Has Tests: ${transformed.hasTests}`)
       console.log(`  - Description Length: ${transformed.description.length}`)
       console.log(`  - Commits: ${transformed.commits || 'Not available'}`)
+      console.log(`  - Bounty Claimed: ${transformed.bountyClaimed}`)
+      console.log(`  - Bounty Amount: $${transformed.bountyClaimedAmount}`)
       
       return transformed
     })
@@ -342,6 +421,17 @@ export async function GET(request: NextRequest) {
       console.log(`Repository: ${repo}`)
     })
     console.log(`Total unique repositories: ${uniqueRepos.length}`)
+    
+    // Log unique IDs to check for duplicates
+    console.log('=== ID UNIQUENESS CHECK ===')
+    const ids = transformedPRs.map((pr: any) => pr.id)
+    const uniqueIds = [...new Set(ids)]
+    console.log(`Total PRs: ${ids.length}, Unique IDs: ${uniqueIds.length}`)
+    if (ids.length !== uniqueIds.length) {
+      console.warn('⚠️ Duplicate IDs detected!')
+      const duplicates = ids.filter((id: any, index: number) => ids.indexOf(id) !== index)
+      console.warn('Duplicate IDs:', duplicates)
+    }
 
     return NextResponse.json(response)
 

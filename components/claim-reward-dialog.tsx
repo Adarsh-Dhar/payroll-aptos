@@ -14,6 +14,7 @@ import { DollarSign, Star, GitPullRequest, AlertCircle, CheckCircle, Loader2 } f
 interface ClaimRewardDialogProps {
   isOpen: boolean
   onClose: () => void
+  onBountyClaimed?: (prNumber: number, bountyAmount: number) => void
   pr: {
     id: number
     prNumber: number
@@ -55,7 +56,7 @@ interface ContributionAnalysis {
   }
 }
 
-export default function ClaimRewardDialog({ isOpen, onClose, pr }: ClaimRewardDialogProps) {
+export default function ClaimRewardDialog({ isOpen, onClose, onBountyClaimed, pr }: ClaimRewardDialogProps) {
   const [githubToken, setGithubToken] = useState("")
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [analysis, setAnalysis] = useState<ContributionAnalysis | null>(null)
@@ -84,7 +85,7 @@ export default function ClaimRewardDialog({ isOpen, onClose, pr }: ClaimRewardDi
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          prUrl: pr.linkedIssue || `https://github.com/${pr.repository}/pull/${pr.prNumber}`,
+          prUrl: `https://github.com/${pr.repository}/pull/${pr.prNumber}`,
           repoUrl: pr.Project.repoUrl,
           githubToken: githubToken
         })
@@ -126,37 +127,69 @@ export default function ClaimRewardDialog({ isOpen, onClose, pr }: ClaimRewardDi
         ? 'http://localhost:3000' 
         : process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
 
-      const response = await fetch(`${baseUrl}/api/v1/contributor/github-prs/claim-bounty`, {
+      // Debug: Log what we're sending
+      const requestBody = {
+        prNumber: pr.prNumber,
+        repository: pr.repository, // Use the repository field directly
+        additions: pr.additions,
+        deletions: pr.deletions,
+        hasTests: pr.hasTests,
+        description: pr.description,
+        commits: pr.commits || [],
+        githubUrl: pr.linkedIssue,
+        bountyAmount: bountyAmount // Pass the calculated bounty amount
+      }
+      
+      console.log('Sending to claim-bounty API:', requestBody)
+      console.log('PR object:', pr)
+      
+      // First, call the claim bounty API to get the bounty amount
+      const claimResponse = await fetch(`${baseUrl}/api/v1/contributor/github-prs/claim-bounty`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          prNumber: pr.prNumber,
-          repository: pr.repository,
-          additions: pr.additions,
-          deletions: pr.deletions,
-          hasTests: pr.hasTests,
-          description: pr.description,
-          commits: pr.commits || [],
-          githubUrl: pr.linkedIssue,
-          bountyAmount: bountyAmount // Pass the calculated bounty amount
-        })
+        body: JSON.stringify(requestBody)
       })
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`)
+      if (!claimResponse.ok) {
+        const errorData = await claimResponse.json().catch(() => ({}))
+        throw new Error(errorData.message || `HTTP ${claimResponse.status}: ${claimResponse.statusText}`)
       }
 
-      const result = await response.json()
+      const claimResult = await claimResponse.json()
       
-      if (result.success) {
-        alert(`Bounty claimed successfully! Amount: $${result.data.bountyAmount}`)
+      if (claimResult.success) {
+        // Now mark the PR as claimed in the database
+        const markClaimedResponse = await fetch(`${baseUrl}/api/v1/contributor/github-prs/mark-claimed`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            prNumber: pr.prNumber,
+            repository: pr.repository, // Use the repository field directly
+            bountyAmount: bountyAmount,
+            projectId: pr.Project.id
+          })
+        })
+
+        if (!markClaimedResponse.ok) {
+          const markErrorData = await markClaimedResponse.json().catch(() => ({}))
+          console.warn('Failed to mark PR as claimed:', markErrorData.message)
+          // Don't throw error here as the bounty was already claimed
+        } else {
+          console.log('PR marked as claimed successfully')
+        }
+
+        alert(`Bounty claimed successfully! Amount: $${claimResult.data.bountyAmount}`)
         onClose()
-        window.location.reload()
+        // Trigger a callback to refresh the PR data instead of reloading the page
+        if (onBountyClaimed) {
+          onBountyClaimed(pr.prNumber, bountyAmount)
+        }
       } else {
-        throw new Error(result.message || 'Failed to claim bounty')
+        throw new Error(claimResult.message || 'Failed to claim bounty')
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unknown error occurred"

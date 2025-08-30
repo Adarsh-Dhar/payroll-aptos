@@ -69,28 +69,58 @@ interface PRAnalysis {
 
 export async function POST(req: NextRequest) {
   try {
-    const { prUrl, repoUrl, owner: bodyOwner, repo: bodyRepo, prNumber: bodyPrNumber, githubToken } = await req.json();
+    console.log('=== GITHUB CONTRIBUTION API REQUEST ===');
+    
+    const body = await req.json();
+    console.log('Request body:', body);
+    
+    const { prUrl, repoUrl, owner: bodyOwner, repo: bodyRepo, prNumber: bodyPrNumber, githubToken } = body;
 
     // Accept either explicit owner/repo/prNumber or a prUrl (preferred) and optional repoUrl
     let owner = bodyOwner as string | undefined;
     let repo = bodyRepo as string | undefined;
     let prNumber = bodyPrNumber as number | string | undefined;
 
+    console.log('Initial values:', { owner, repo, prNumber, prUrl, repoUrl });
+
     if (typeof prUrl === 'string' && prUrl.length > 0) {
-      const parsed = parsePrUrl(prUrl);
-      owner = parsed.owner;
-      repo = parsed.repo;
-      prNumber = parsed.prNumber;
+      console.log('Parsing PR URL:', prUrl);
+      try {
+        const parsed = parsePrUrl(prUrl);
+        owner = parsed.owner;
+        repo = parsed.repo;
+        prNumber = parsed.prNumber;
+        console.log('Parsed from PR URL:', { owner, repo, prNumber });
+      } catch (error) {
+        console.error('Failed to parse PR URL:', error);
+        return NextResponse.json(
+          { error: `Failed to parse PR URL: ${error}` },
+          { status: 400 }
+        );
+      }
     }
 
     if ((!owner || !repo || !prNumber) && typeof repoUrl === 'string' && repoUrl.length > 0) {
-      const parsedRepo = parseRepoUrl(repoUrl);
-      owner ||= parsedRepo.owner;
-      repo ||= parsedRepo.repo;
+      console.log('Parsing repo URL:', repoUrl);
+      try {
+        const parsedRepo = parseRepoUrl(repoUrl);
+        owner ||= parsedRepo.owner;
+        repo ||= parsedRepo.repo;
+        console.log('Parsed from repo URL:', { owner, repo });
+      } catch (error) {
+        console.error('Failed to parse repo URL:', error);
+        return NextResponse.json(
+          { error: `Failed to parse repo URL: ${error}` },
+          { status: 400 }
+        );
+      }
     }
+
+    console.log('Final parsed values:', { owner, repo, prNumber });
 
     // Validate required fields
     if (!owner || !repo || !prNumber || !githubToken) {
+      console.error('Missing required fields:', { owner, repo, prNumber, hasToken: !!githubToken });
       return NextResponse.json(
         { error: 'Missing required fields: provide prUrl (recommended) or owner, repo, prNumber, and githubToken' },
         { status: 400 }
@@ -108,27 +138,70 @@ export async function POST(req: NextRequest) {
     } as Record<string, string>;
 
     // First check if repository exists
+    console.log('Checking repository access...');
     const repoCheckUrl = `https://api.github.com/repos/${owner}/${repo}`;
-    const repoResponse = await fetch(repoCheckUrl, { headers });
-    if (!repoResponse.ok) {
-      if (repoResponse.status === 404) {
-        throw new Error(`Repository not found: ${owner}/${repo}. Please check the repository name and ensure it exists on GitHub.`);
+    console.log('Repository check URL:', repoCheckUrl);
+    
+    try {
+      const repoResponse = await fetch(repoCheckUrl, { headers });
+      console.log('Repository check response status:', repoResponse.status);
+      
+      if (!repoResponse.ok) {
+        if (repoResponse.status === 404) {
+          const error = `Repository not found: ${owner}/${repo}. Please check the repository name and ensure it exists on GitHub.`;
+          console.error(error);
+          return NextResponse.json({ error }, { status: 404 });
+        }
+        const error = `Failed to access repository: ${repoResponse.status} ${repoResponse.statusText}`;
+        console.error(error);
+        return NextResponse.json({ error }, { status: repoResponse.status });
       }
-      throw new Error(`Failed to access repository: ${repoResponse.status} ${repoResponse.statusText}`);
+      console.log('✅ Repository access confirmed');
+    } catch (error) {
+      console.error('Repository check failed:', error);
+      return NextResponse.json(
+        { error: `Repository check failed: ${error}` },
+        { status: 500 }
+      );
     }
 
     // Fetch PR details
-    const prResponse = await fetch(baseUrl, { headers });
-    if (!prResponse.ok) {
-      let detail = '';
-      try {
-        const body = await prResponse.json();
-        detail = body?.message ? ` - ${body.message}` : '';
-      } catch {}
-      console.error('GitHub API failed:', { status: prResponse.status, statusText: prResponse.statusText, detail, url: baseUrl });
-      throw new Error(`GitHub API error: ${prResponse.status} ${prResponse.statusText}${detail}`);
+    console.log('Fetching PR details...');
+    console.log('PR URL:', baseUrl);
+    
+    let prData: GitHubPR;
+    try {
+      const prResponse = await fetch(baseUrl, { headers });
+      console.log('PR response status:', prResponse.status);
+      
+      if (!prResponse.ok) {
+        let detail = '';
+        try {
+          const body = await prResponse.json();
+          detail = body?.message ? ` - ${body.message}` : '';
+        } catch {}
+        const error = `GitHub API error: ${prResponse.status} ${prResponse.statusText}${detail}`;
+        console.error('GitHub API failed:', { status: prResponse.status, statusText: prResponse.statusText, detail, url: baseUrl });
+        return NextResponse.json({ error }, { status: prResponse.status });
+      }
+      
+      prData = await prResponse.json();
+      console.log('✅ PR details fetched successfully');
+      console.log('PR data:', { 
+        id: prData.id, 
+        number: prData.number, 
+        title: prData.title,
+        state: prData.state,
+        additions: prData.additions,
+        deletions: prData.deletions
+      });
+    } catch (error) {
+      console.error('PR fetch failed:', error);
+      return NextResponse.json(
+        { error: `Failed to fetch PR: ${error}` },
+        { status: 500 }
+      );
     }
-    const prData: GitHubPR = await prResponse.json();
 
     // Fetch PR files
     const filesResponse = await fetch(`${baseUrl}/files`, { headers });

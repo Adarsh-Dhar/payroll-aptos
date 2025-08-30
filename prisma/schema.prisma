@@ -88,10 +88,13 @@ model PullRequest {
   bountyAmount    Float     @default(0)
   bountyClaimed   Boolean   @default(false)
   bountyClaimedAt DateTime?
+  bountyClaimedBy Int?      // ID of the developer who claimed the bounty
+  bountyClaimedAmount Float? // The actual amount claimed
   Developer       Developer @relation(fields: [developerId], references: [id])
   Project         Project   @relation(fields: [projectId], references: [id])
 
-  @@unique([projectId, prNumber])
+  @@unique([projectId, prNumber, developerId])
   @@index([developerId])
   @@index([projectId])
+  @@index([bountyClaimed])
 }
