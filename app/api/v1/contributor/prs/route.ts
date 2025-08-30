@@ -61,14 +61,16 @@ export async function GET(request: NextRequest) {
     const pullRequests = await prisma.pullRequest.findMany({
       where,
       include: {
-        project: {
+        Project: {
           select: {
             id: true,
             name: true,
             repoUrl: true,
+            lowestBounty: true,
+            highestBounty: true,
           }
         },
-        developer: {
+        Developer: {
           select: {
             id: true,
             username: true,

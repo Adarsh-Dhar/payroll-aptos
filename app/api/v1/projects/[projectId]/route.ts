@@ -9,6 +9,8 @@ const updateProjectSchema = z.object({
   description: z.string().optional(),
   repoUrl: z.string().url().optional(),
   budget: z.number().positive().optional(),
+  lowestBounty: z.number().positive().optional(),
+  highestBounty: z.number().positive().optional(),
   adminId: z.number().int().positive().optional(),
   isActive: z.boolean().optional(),
   maxContributors: z.number().int().positive().optional(),
@@ -33,7 +35,7 @@ export async function GET(
     const project = await prisma.project.findUnique({
       where: { id: projectIdNum },
       include: {
-        admin: {
+        Admin: {
           select: {
             id: true,
             name: true,
@@ -42,15 +44,15 @@ export async function GET(
         },
         _count: {
           select: {
-            pullRequests: true,
-            payouts: true,
+            PullRequest: true,
+            Payout: true,
           }
         },
-        pullRequests: {
+        PullRequest: {
           take: 5,
           orderBy: { createdAt: 'desc' },
           include: {
-            developer: {
+            Developer: {
               select: {
                 id: true,
                 username: true,
@@ -58,11 +60,11 @@ export async function GET(
             }
           }
         },
-        payouts: {
+        Payout: {
           take: 5,
           orderBy: { paidAt: 'desc' },
           include: {
-            developer: {
+            Developer: {
               select: {
                 id: true,
                 username: true,
@@ -82,7 +84,12 @@ export async function GET(
 
     return NextResponse.json({
       success: true,
-      data: project
+      data: {
+        ...project,
+        // Ensure bounty fields are included with defaults
+        lowestBounty: project.lowestBounty || 100,
+        highestBounty: project.highestBounty || 1000,
+      }
     });
   } catch (error) {
     console.error('Project fetch error:', error);
@@ -125,6 +132,32 @@ export async function PUT(
       );
     }
 
+    // Validate bounty range if both are being updated
+    if (updateData.lowestBounty !== undefined && updateData.highestBounty !== undefined) {
+      if (updateData.lowestBounty >= updateData.highestBounty) {
+        return NextResponse.json(
+          { success: false, message: 'Highest bounty must be greater than lowest bounty' },
+          { status: 400 }
+        );
+      }
+    } else if (updateData.lowestBounty !== undefined) {
+      // Only lowest bounty is being updated
+      if (updateData.lowestBounty >= existingProject.highestBounty) {
+        return NextResponse.json(
+          { success: false, message: 'Lowest bounty must be less than current highest bounty' },
+          { status: 400 }
+        );
+      }
+    } else if (updateData.highestBounty !== undefined) {
+      // Only highest bounty is being updated
+      if (existingProject.lowestBounty >= updateData.highestBounty) {
+        return NextResponse.json(
+          { success: false, message: 'Highest bounty must be greater than current lowest bounty' },
+          { status: 400 }
+        );
+      }
+    }
+
     // If adminId is being updated, verify the new admin exists
     if (updateData.adminId) {
       const admin = await prisma.admin.findUnique({
@@ -143,7 +176,7 @@ export async function PUT(
       where: { id: projectIdNum },
       data: updateData,
       include: {
-        admin: {
+        Admin: {
           select: {
             id: true,
             name: true,

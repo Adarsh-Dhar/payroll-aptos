@@ -40,11 +40,11 @@ export async function GET(request: NextRequest) {
       include: {
         _count: {
           select: {
-            prs: true,
-            payouts: true,
+            PullRequest: true,
+            Payout: true,
           }
         },
-        payouts: {
+        Payout: {
           select: {
             amount: true,
             paidAt: true,
@@ -59,14 +59,14 @@ export async function GET(request: NextRequest) {
 
     // Calculate additional stats
     const developersWithStats = developers.map(dev => {
-      const totalEarnings = dev.payouts.reduce((sum, payout) => sum + payout.amount, 0);
-      const activeProjects = new Set(dev.payouts.map(p => p.projectId)).size;
+      const totalEarnings = dev.Payout.reduce((sum, payout) => sum + payout.amount, 0);
+      const activeProjects = new Set(dev.Payout.map(p => p.projectId)).size;
       
       return {
         ...dev,
         totalEarnings,
         activeProjects,
-        averageScore: dev._count.prs > 0 ? 8.5 : 0, // TODO: Calculate from actual PR scores
+        averageScore: dev._count.PullRequest > 0 ? 8.5 : 0, // TODO: Calculate from actual PR scores
       };
     });
 
@@ -117,12 +117,15 @@ export async function POST(request: NextRequest) {
     }
 
     const newDeveloper = await prisma.developer.create({
-      data: developerData,
+      data: {
+        ...developerData,
+        updatedAt: new Date(),
+      },
       include: {
         _count: {
           select: {
-            prs: true,
-            payouts: true,
+            PullRequest: true,
+            Payout: true,
           }
         }
       }

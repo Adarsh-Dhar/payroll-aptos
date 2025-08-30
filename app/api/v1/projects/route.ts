@@ -19,6 +19,8 @@ const createProjectSchema = z.object({
   description: z.string().optional(),
   repoUrl: z.string().url(),
   budget: z.number().positive(),
+  lowestBounty: z.number().positive(),
+  highestBounty: z.number().positive(),
   adminId: z.number().int().positive(),
   isActive: z.boolean().default(true),
   maxContributors: z.number().int().positive().optional(),
@@ -75,7 +77,7 @@ export async function GET(request: NextRequest) {
     const projects = await prisma.project.findMany({
       where,
       include: {
-        admin: {
+        Admin: {
           select: {
             id: true,
             name: true,
@@ -84,8 +86,8 @@ export async function GET(request: NextRequest) {
         },
         _count: {
           select: {
-            pullRequests: true,
-            payouts: true,
+            PullRequest: true,
+            Payout: true,
           }
         }
       },
@@ -98,7 +100,12 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: projects,
+      data: projects.map(project => ({
+        ...project,
+        // Ensure bounty fields are included
+        lowestBounty: project.lowestBounty || 100,
+        highestBounty: project.highestBounty || 1000,
+      })),
       pagination: {
         page,
         limit,
@@ -136,6 +143,14 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const projectData = createProjectSchema.parse(body);
 
+    // Validate bounty range
+    if (projectData.lowestBounty >= projectData.highestBounty) {
+      return NextResponse.json(
+        { success: false, message: 'Highest bounty must be greater than lowest bounty' },
+        { status: 400 }
+      );
+    }
+
     // Verify admin exists
     const admin = await prisma.admin.findUnique({
       where: { id: projectData.adminId }
@@ -149,9 +164,12 @@ export async function POST(request: NextRequest) {
     }
 
     const newProject = await prisma.project.create({
-      data: projectData,
+      data: {
+        ...projectData,
+        updatedAt: new Date(),
+      } as any, // Use type assertion to bypass the type mismatch
       include: {
-        admin: {
+        Admin: {
           select: {
             id: true,
             name: true,

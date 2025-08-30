@@ -25,16 +25,21 @@ export type ContributorPR = {
   merged: boolean
   score: number
   amountPaid: number
+  bountyAmount: number
+  bountyClaimed: boolean
+  bountyClaimedAt: string | null
   developerId: number
   projectId: number
   createdAt: string
   updatedAt: string
-  project: {
+  Project: {
     id: number
     name: string
     repoUrl: string
+    lowestBounty: number
+    highestBounty: number
   }
-  developer: {
+  Developer: {
     id: number
     username: string
     githubId: string
@@ -66,6 +71,7 @@ export default function ContributorPRs() {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [projectFilter, setProjectFilter] = useState('all')
+  const [claimingBounty, setClaimingBounty] = useState<number | null>(null)
 
   const fetchPRs = async () => {
     try {
@@ -136,6 +142,8 @@ export default function ContributorPRs() {
       const result = await dbResponse.json()
       if (result.success) {
         console.log('Database PRs fetched successfully:', result)
+        console.log('PRs data structure:', result.data)
+        console.log('First PR example:', result.data?.[0])
         setPrsData(result)
       } else {
         console.error('Database PRs API error:', result.message)
@@ -155,7 +163,13 @@ export default function ContributorPRs() {
     }
   }, [session])
 
-  const filteredPRs = prsData?.data.filter(pr => {
+  const filteredPRs = prsData?.data?.filter(pr => {
+    // Safety check: ensure pr exists and has required properties
+    if (!pr || !pr.title) return false
+    
+    // Additional safety check: ensure Project relation exists
+    if (!pr.Project || !pr.Project.id) return false
+    
     const matchesSearch = !searchTerm || 
       pr.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (pr.description && pr.description.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -165,17 +179,93 @@ export default function ContributorPRs() {
       (statusFilter === "open" && !pr.merged)
     
     const matchesProject = projectFilter === "all" || 
-      pr.project.id.toString() === projectFilter
+      pr.projectId?.toString() === projectFilter
     
     return matchesSearch && matchesStatus && matchesProject
   }) || []
 
-  const uniqueProjects = prsData?.data.reduce((projects, pr) => {
-    if (!projects.find(p => p.id === pr.project.id)) {
-      projects.push(pr.project)
+  const uniqueProjects = prsData?.data?.reduce((projects, pr) => {
+    // Safety check: ensure pr and pr.Project exist
+    if (!pr || !pr.Project || !pr.Project.id) return projects
+    
+    // Check if we already have this project in our array
+    if (!projects.find(p => p.id === pr.projectId)) {
+      projects.push(pr.Project)
     }
     return projects
-  }, [] as typeof prsData.data[0]['project'][]) || []
+  }, [] as typeof prsData.data[0]['Project'][]) || []
+
+  const handleClaimBounty = async (pr: ContributorPR) => {
+    if (!pr.merged || pr.bountyClaimed) return
+
+    setClaimingBounty(pr.id)
+    try {
+      const baseUrl = process.env.NODE_ENV === 'development' 
+        ? 'http://localhost:3000' 
+        : process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+      
+      // Prepare the request data
+      const requestData = {
+        prNumber: pr.prNumber,
+        repository: pr.Project.name, // This contains the repository name like "owner/repo"
+        additions: pr.additions,
+        deletions: pr.deletions,
+        hasTests: pr.hasTests,
+        description: pr.description,
+        commits: [], // Empty array for now since commits field doesn't exist yet
+        githubUrl: pr.linkedIssue // This contains the GitHub PR URL
+      };
+      
+      console.log('Sending bounty claim request:', requestData);
+      console.log('Request URL:', `${baseUrl}/api/v1/contributor/github-prs/claim-bounty`);
+      
+      // Call the new GitHub PR bounty claim endpoint
+      const response = await fetch(
+        `${baseUrl}/api/v1/contributor/github-prs/claim-bounty`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestData)
+        }
+      )
+
+      console.log('Response status:', response.status);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
+      
+      let result;
+      try {
+        const responseText = await response.text();
+        console.log('Response text:', responseText);
+        
+        if (responseText.trim()) {
+          result = JSON.parse(responseText);
+        } else {
+          result = { success: false, message: 'Empty response from server' };
+        }
+      } catch (error) {
+        console.error('Failed to parse response:', error);
+        result = { success: false, message: 'Invalid response from server' };
+      }
+      
+      if (result.success) {
+        console.log('Bounty claimed successfully:', result)
+        // Show success message with bounty amount
+        alert(`Bounty claimed successfully! Amount: $${result.data.bountyAmount}`)
+        // Refresh the PRs data to show updated bounty status
+        await fetchPRs()
+      } else {
+        console.error('Failed to claim bounty:', result.message)
+        alert(`Failed to claim bounty: ${result.message}`)
+      }
+    } catch (error) {
+      console.error('Error claiming bounty:', error)
+      alert('Error claiming bounty. Please try again.')
+    } finally {
+      setClaimingBounty(null)
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -357,7 +447,7 @@ export default function ContributorPRs() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Projects</SelectItem>
-                  {uniqueProjects.map((project) => (
+                  {uniqueProjects.filter(project => project && project.id && project.name).map((project) => (
                     <SelectItem key={project.id} value={project.id.toString()}>
                       {project.name}
                     </SelectItem>
@@ -372,17 +462,18 @@ export default function ContributorPRs() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[15%]">PR #</TableHead>
-                  <TableHead className="w-[35%]">Title & Project</TableHead>
-                  <TableHead className="w-[15%]">Status</TableHead>
-                  <TableHead className="w-[15%]">Score</TableHead>
-                  <TableHead className="w-[20%]">Amount</TableHead>
+                  <TableHead className="w-[12%]">PR #</TableHead>
+                  <TableHead className="w-[30%]">Title & Project</TableHead>
+                  <TableHead className="w-[12%]">Status</TableHead>
+                  <TableHead className="w-[12%]">Score</TableHead>
+                  <TableHead className="w-[20%]">Bounty</TableHead>
+                  <TableHead className="w-[14%]">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredPRs.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8">
+                    <TableCell colSpan={6} className="text-center py-8">
                       <div className="text-muted-foreground">
                         {searchTerm || statusFilter !== "all" || projectFilter !== "all" 
                           ? "No PRs match your filters." 
@@ -407,7 +498,7 @@ export default function ContributorPRs() {
                           <div className="text-sm font-medium leading-6">{pr.title}</div>
                           <div className="flex items-center gap-2 mt-1">
                             <Badge variant="outline" className="text-xs">
-                              {pr.project.name}
+                              {pr.Project?.name || 'Unknown Project'}
                             </Badge>
                             <Button
                               variant="ghost"
@@ -416,7 +507,7 @@ export default function ContributorPRs() {
                               className="h-6 px-2 text-xs"
                             >
                               <a 
-                                href={pr.project.repoUrl} 
+                                href={pr.Project?.repoUrl || '#'} 
                                 target="_blank" 
                                 rel="noopener noreferrer"
                               >
@@ -439,16 +530,77 @@ export default function ContributorPRs() {
                       <TableCell>
                         <div className="flex items-center gap-1">
                           <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-                          <span className="font-medium">{pr.score}</span>
+                          <span className="font-medium">{pr.score || 0}</span>
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div className="font-medium">
-                          ${pr.amountPaid.toLocaleString()}
+                        <div className="space-y-1">
+                          {pr.bountyClaimed ? (
+                            <div className="text-green-600 font-medium">
+                              ${(pr.bountyAmount || 0).toLocaleString()} Claimed
+                            </div>
+                          ) : pr.merged ? (
+                            <div className="space-y-1">
+                              <div className="font-medium text-blue-600">
+                                ${(pr.bountyAmount || 0).toLocaleString()}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                Bounty Range: ${pr.Project?.lowestBounty?.toLocaleString() || '0'} - ${pr.Project?.highestBounty?.toLocaleString() || '0'}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="text-muted-foreground text-sm">
+                              Not merged yet
+                            </div>
+                          )}
                         </div>
-                        <div className="text-xs text-muted-foreground">
-                          <Calendar className="h-3 w-3 inline mr-1" />
-                          {new Date(pr.createdAt).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col gap-2">
+                          {pr.merged && !pr.bountyClaimed ? (
+                            <Button
+                              onClick={() => handleClaimBounty(pr)}
+                              disabled={claimingBounty === pr.id}
+                              size="sm"
+                              className="bg-green-600 hover:bg-green-700 text-white"
+                            >
+                              {claimingBounty === pr.id ? (
+                                <div className="flex items-center gap-2">
+                                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                                  Claiming...
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2">
+                                  <DollarSign className="h-3 w-3" />
+                                  Claim Reward
+                                </div>
+                              )}
+                            </Button>
+                          ) : pr.bountyClaimed ? (
+                            <Badge variant="outline" className="text-green-600 border-green-600">
+                              ✓ Claimed
+                            </Badge>
+                          ) : (
+                            <Button
+                              onClick={() => handleClaimBounty(pr)}
+                              disabled={claimingBounty === pr.id || !pr.merged}
+                              size="sm"
+                              variant={pr.merged ? "default" : "outline"}
+                              className={pr.merged ? "bg-blue-600 hover:bg-blue-700 text-white" : ""}
+                            >
+                              {claimingBounty === pr.id ? (
+                                <div className="flex items-center gap-2">
+                                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                                  Claiming...
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2">
+                                  <DollarSign className="h-3 w-3" />
+                                  {pr.merged ? "Claim Reward" : "Merge Required"}
+                                </div>
+                              )}
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </motion.tr>

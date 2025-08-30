@@ -23,15 +23,15 @@ export async function GET(
       include: {
         _count: {
           select: {
-            prs: true,
-            payouts: true,
+            PullRequest: true,
+            Payout: true,
           }
         },
-        prs: {
+        PullRequest: {
           take: 10,
           orderBy: { createdAt: 'desc' },
           include: {
-            project: {
+            Project: {
               select: {
                 id: true,
                 name: true,
@@ -39,11 +39,11 @@ export async function GET(
             }
           }
         },
-        payouts: {
+        Payout: {
           take: 10,
           orderBy: { paidAt: 'desc' },
           include: {
-            project: {
+            Project: {
               select: {
                 id: true,
                 name: true,
@@ -62,15 +62,15 @@ export async function GET(
     }
 
     // Calculate additional stats
-    const totalEarnings = developer.payouts.reduce((sum, payout) => sum + payout.amount, 0);
-    const activeProjects = new Set(developer.payouts.map(p => p.projectId)).size;
-    const averageScore = developer.prs.length > 0 ? 
-      developer.prs.reduce((sum, pr) => sum + pr.score, 0) / developer.prs.length : 0;
+    const totalEarnings = developer.Payout.reduce((sum, payout) => sum + payout.amount, 0);
+    const activeProjects = new Set(developer.Payout.map(p => p.projectId)).size;
+    const averageScore = developer.PullRequest.length > 0 ? 
+      developer.PullRequest.reduce((sum, pr) => sum + pr.score, 0) / developer.PullRequest.length : 0;
 
     // Get project breakdown
     const projectBreakdown = await prisma.project.findMany({
       where: {
-        pullRequests: {
+        PullRequest: {
           some: {
             developerId: developerIdNum
           }
@@ -79,19 +79,19 @@ export async function GET(
       include: {
         _count: {
           select: {
-            pullRequests: {
+            PullRequest: {
               where: {
                 developerId: developerIdNum
               }
             },
-            payouts: {
+            Payout: {
               where: {
                 developerId: developerIdNum
               }
             }
           }
         },
-        pullRequests: {
+        PullRequest: {
           where: {
             developerId: developerIdNum
           },
@@ -112,22 +112,22 @@ export async function GET(
       projectBreakdown: projectBreakdown.map(project => ({
         id: project.id,
         name: project.name,
-        totalPRs: project._count.pullRequests,
-        mergedPRs: project.pullRequests.filter(pr => pr.merged).length,
-        totalEarnings: project.pullRequests.reduce((sum, pr) => sum + pr.amountPaid, 0),
-        averageScore: project.pullRequests.length > 0 ? 
-          project.pullRequests.reduce((sum, pr) => sum + pr.score, 0) / project.pullRequests.length : 0,
+        totalPRs: project._count.PullRequest,
+        mergedPRs: project.PullRequest.filter(pr => pr.merged).length,
+        totalEarnings: project.PullRequest.reduce((sum, pr) => sum + pr.amountPaid, 0),
+        averageScore: project.PullRequest.length > 0 ? 
+          project.PullRequest.reduce((sum, pr) => sum + pr.score, 0) / project.PullRequest.length : 0,
       })),
       recentActivity: [
-        ...developer.prs.slice(0, 5).map(pr => ({
+        ...developer.PullRequest.slice(0, 5).map(pr => ({
           type: 'pr_merged',
-          project: pr.project.name,
+          project: pr.Project.name,
           date: pr.createdAt,
           amount: pr.amountPaid,
         })),
-        ...developer.payouts.slice(0, 5).map(payout => ({
+        ...developer.Payout.slice(0, 5).map(payout => ({
           type: 'payout',
-          project: payout.project.name,
+          project: payout.Project.name,
           date: payout.paidAt,
           amount: payout.amount,
         }))

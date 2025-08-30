@@ -80,14 +80,14 @@ export async function GET(
     const pullRequests = await prisma.pullRequest.findMany({
       where,
       include: {
-        developer: {
+        Developer: {
           select: {
             id: true,
             username: true,
             githubId: true,
           }
         },
-        project: {
+        Project: {
           select: {
             id: true,
             name: true,
@@ -186,23 +186,36 @@ export async function POST(
       }, { status: 409 });
     }
 
+    // Calculate bounty amount using the formula: L + (D * x / 10)
+    // where L = lowest bounty, D = difference between highest and lowest, x = score
+    const lowestBounty = project.lowestBounty;
+    const highestBounty = project.highestBounty;
+    const difference = highestBounty - lowestBounty;
+    const score = prData.score;
+    
+    const bountyAmount = lowestBounty + (difference * score / 10);
+
     const newPR = await prisma.pullRequest.create({
       data: {
         ...prData,
         projectId: projectIdNum,
+        bountyAmount: bountyAmount,
+        updatedAt: new Date(),
       },
       include: {
-        developer: {
+        Developer: {
           select: {
             id: true,
             username: true,
             githubId: true,
           }
         },
-        project: {
+        Project: {
           select: {
             id: true,
             name: true,
+            lowestBounty: true,
+            highestBounty: true,
           }
         }
       }
@@ -211,8 +224,16 @@ export async function POST(
     return NextResponse.json({
       success: true,
       data: newPR,
-      message: 'Pull request created successfully'
-    }, { status: 201 });
+      message: 'Pull request created successfully',
+      bountyCalculation: {
+        lowestBounty,
+        highestBounty,
+        difference,
+        score,
+        calculatedBounty: bountyAmount,
+        formula: `L + (D × x / 10) = ${lowestBounty} + (${difference} × ${score} / 10) = ${bountyAmount}`
+      }
+    });
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json(

@@ -1,5 +1,6 @@
 generator client {
   provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
 }
 
 datasource db {
@@ -12,69 +13,25 @@ model Admin {
   email     String    @unique
   name      String?
   createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  updatedAt DateTime
   password  String
-  projects  Project[]
+  Project   Project[]
 }
 
 model Developer {
-  id        Int           @id @default(autoincrement())
-  githubId  String        @unique
-  username  String
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
-  email     String?
-  password  String?
-  payouts   Payout[]
-  prs       PullRequest[]
-}
-
-model Project {
-  id           Int           @id @default(autoincrement())
-  name         String
-  description  String?
-  repoUrl      String
-  adminId      Int
-  budget       Float
-  isActive     Boolean       @default(true)
-  maxContributors Int?
-  tags         String[]      @default([])
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  payouts      Payout[]
-  admin        Admin         @relation(fields: [adminId], references: [id])
-  pullRequests PullRequest[]
-
-  @@index([adminId])
-  @@index([isActive])
-}
-
-model PullRequest {
-  id          Int       @id @default(autoincrement())
-  prNumber    Int
-  title       String
-  description String?
-  additions   Int
-  deletions   Int
-  hasTests    Boolean   @default(false)
-  linkedIssue String?
-  merged      Boolean   @default(false)
-  score       Float
-  amountPaid  Float     @default(0)
-  developerId Int
-  projectId   Int
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  developer   Developer @relation(fields: [developerId], references: [id])
-  project     Project   @relation(fields: [projectId], references: [id])
-
-  @@unique([projectId, prNumber])
-  @@index([developerId])
-  @@index([projectId])
+  id          Int           @id @default(autoincrement())
+  githubId    String        @unique
+  username    String
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime
+  email       String?
+  password    String?
+  Payout      Payout[]
+  PullRequest PullRequest[]
 }
 
 model Payout {
-  id            String    @id @default(cuid())
+  id            String    @id
   amount        Float
   paidAt        DateTime  @default(now())
   developerId   Int
@@ -82,10 +39,59 @@ model Payout {
   createdAt     DateTime  @default(now())
   status        String    @default("pending")
   transactionId String?
-  updatedAt     DateTime  @updatedAt
-  developer     Developer @relation(fields: [developerId], references: [id])
-  project       Project   @relation(fields: [projectId], references: [id])
+  updatedAt     DateTime
+  Developer     Developer @relation(fields: [developerId], references: [id])
+  Project       Project   @relation(fields: [projectId], references: [id])
 
+  @@index([developerId])
+  @@index([projectId])
+}
+
+model Project {
+  id              Int           @id @default(autoincrement())
+  name            String
+  description     String?
+  repoUrl         String
+  adminId         Int
+  budget          Float
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime
+  isActive        Boolean       @default(true)
+  maxContributors Int?
+  tags            String[]      @default([])
+  highestBounty   Float
+  lowestBounty    Float
+  Payout          Payout[]
+  Admin           Admin         @relation(fields: [adminId], references: [id])
+  PullRequest     PullRequest[]
+
+  @@index([adminId])
+  @@index([isActive])
+}
+
+model PullRequest {
+  id              Int       @id @default(autoincrement())
+  prNumber        Int
+  title           String
+  description     String?
+  additions       Int
+  deletions       Int
+  hasTests        Boolean   @default(false)
+  linkedIssue     String?
+  merged          Boolean   @default(false)
+  score           Float
+  amountPaid      Float     @default(0)
+  developerId     Int
+  projectId       Int
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime
+  bountyAmount    Float     @default(0)
+  bountyClaimed   Boolean   @default(false)
+  bountyClaimedAt DateTime?
+  Developer       Developer @relation(fields: [developerId], references: [id])
+  Project         Project   @relation(fields: [projectId], references: [id])
+
+  @@unique([projectId, prNumber])
   @@index([developerId])
   @@index([projectId])
 }

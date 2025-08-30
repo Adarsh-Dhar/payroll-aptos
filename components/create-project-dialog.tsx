@@ -18,6 +18,8 @@ type CreateProjectFormState = {
 	description: string
 	repoUrl: string
 	budget: string
+	lowestBounty: string
+	highestBounty: string
 	adminId: string
 }
 
@@ -29,6 +31,8 @@ export function CreateProjectDialog() {
 		description: "",
 		repoUrl: "",
 		budget: "",
+		lowestBounty: "",
+		highestBounty: "",
 		adminId: "",
 	})
 
@@ -41,6 +45,8 @@ export function CreateProjectDialog() {
 				description: form.description.trim() || undefined,
 				repoUrl: form.repoUrl.trim(),
 				budget: Number(form.budget),
+				lowestBounty: Number(form.lowestBounty),
+				highestBounty: Number(form.highestBounty),
 				adminId: Number(form.adminId),
 			}
 
@@ -55,7 +61,7 @@ export function CreateProjectDialog() {
 
 			if (res.ok) {
 				setOpen(false)
-				setForm({ name: "", description: "", repoUrl: "", budget: "", adminId: "" })
+				setForm({ name: "", description: "", repoUrl: "", budget: "", lowestBounty: "", highestBounty: "", adminId: "" })
 			}
 		} catch (err) {
 			console.error("Create project error:", err)
@@ -105,7 +111,7 @@ export function CreateProjectDialog() {
 						/>
 					</div>
 					<div className="grid gap-2">
-						<Label htmlFor="budget">Budget (USD)</Label>
+						<Label htmlFor="budget">Total Budget (USD)</Label>
 						<Input
 							id="budget"
 							type="number"
@@ -116,6 +122,34 @@ export function CreateProjectDialog() {
 							onChange={(e) => setForm((s) => ({ ...s, budget: e.target.value }))}
 							required
 						/>
+					</div>
+					<div className="grid grid-cols-2 gap-4">
+						<div className="grid gap-2">
+							<Label htmlFor="lowestBounty">Lowest Bounty (USD)</Label>
+							<Input
+								id="lowestBounty"
+								type="number"
+								min="0"
+								step="0.01"
+								placeholder="100"
+								value={form.lowestBounty}
+								onChange={(e) => setForm((s) => ({ ...s, lowestBounty: e.target.value }))}
+								required
+							/>
+						</div>
+						<div className="grid gap-2">
+							<Label htmlFor="highestBounty">Highest Bounty (USD)</Label>
+							<Input
+								id="highestBounty"
+								type="number"
+								min="0"
+								step="0.01"
+								placeholder="1000"
+								value={form.highestBounty}
+								onChange={(e) => setForm((s) => ({ ...s, highestBounty: e.target.value }))}
+								required
+							/>
+						</div>
 					</div>
 					<div className="grid gap-2">
 						<Label htmlFor="adminId">Admin ID</Label>

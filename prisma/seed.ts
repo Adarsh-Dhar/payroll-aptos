@@ -13,6 +13,7 @@ async function main() {
       email: 'admin@devpaystream.com',
       name: 'Admin User',
       password: 'admin123', // In production, use bcrypt to hash passwords
+      updatedAt: new Date(),
     },
   })
 
@@ -23,6 +24,7 @@ async function main() {
       email: 'john@example.com',
       name: 'John Doe',
       password: 'password123',
+      updatedAt: new Date(),
     },
   })
 
@@ -37,6 +39,7 @@ async function main() {
       username: 'alice-dev',
       email: 'alice@example.com',
       password: 'password123',
+      updatedAt: new Date(),
     },
   })
 
@@ -48,6 +51,7 @@ async function main() {
       username: 'bob-coder',
       email: 'bob@example.com',
       password: 'password123',
+      updatedAt: new Date(),
     },
   })
 
@@ -59,6 +63,7 @@ async function main() {
       username: 'charlie-hacker',
       email: 'charlie@example.com',
       password: 'password123',
+      updatedAt: new Date(),
     },
   })
 
@@ -73,10 +78,13 @@ async function main() {
       description: 'Main payment processing system for developer contributions',
       repoUrl: 'https://github.com/devpaystream/core',
       budget: 15000,
+      lowestBounty: 100,
+      highestBounty: 1000,
       adminId: admin1.id,
       isActive: true,
       maxContributors: 10,
       tags: ['backend', 'payment', 'typescript', 'nodejs'],
+      updatedAt: new Date(),
     },
   })
 
@@ -88,10 +96,13 @@ async function main() {
       description: 'Modern React dashboard for project management',
       repoUrl: 'https://github.com/devpaystream/frontend',
       budget: 8000,
+      lowestBounty: 75,
+      highestBounty: 800,
       adminId: admin1.id,
       isActive: true,
       maxContributors: 5,
       tags: ['frontend', 'react', 'typescript', 'ui'],
+      updatedAt: new Date(),
     },
   })
 
@@ -103,10 +114,13 @@ async function main() {
       description: 'High-performance API gateway with rate limiting',
       repoUrl: 'https://github.com/devpaystream/gateway',
       budget: 12000,
+      lowestBounty: 120,
+      highestBounty: 1200,
       adminId: admin2.id,
       isActive: true,
       maxContributors: 8,
       tags: ['api', 'gateway', 'golang', 'microservices'],
+      updatedAt: new Date(),
     },
   })
 
@@ -118,10 +132,13 @@ async function main() {
       description: 'Cross-platform mobile app for contributors',
       repoUrl: 'https://github.com/devpaystream/mobile',
       budget: 6000,
+      lowestBounty: 60,
+      highestBounty: 600,
       adminId: admin2.id,
       isActive: false, // Inactive project
       maxContributors: 3,
       tags: ['mobile', 'react-native', 'typescript'],
+      updatedAt: new Date(),
     },
   })
 
@@ -142,8 +159,12 @@ async function main() {
       merged: true,
       score: 8.5,
       amountPaid: 200,
+      bountyAmount: 100 + ((1000 - 100) * 8.5 / 10), // L + (D * x / 10)
+      bountyClaimed: true,
+      bountyClaimedAt: new Date(),
       developerId: dev1.id,
       projectId: project1.id,
+      updatedAt: new Date(),
     },
   })
 
@@ -161,8 +182,12 @@ async function main() {
       merged: true,
       score: 7.0,
       amountPaid: 150,
+      bountyAmount: 100 + ((1000 - 100) * 7.0 / 10), // L + (D * x / 10)
+      bountyClaimed: true,
+      bountyClaimedAt: new Date(),
       developerId: dev2.id,
       projectId: project1.id,
+      updatedAt: new Date(),
     },
   })
 
@@ -180,8 +205,11 @@ async function main() {
       merged: false,
       score: 6.5,
       amountPaid: 0,
+      bountyAmount: 75 + ((800 - 75) * 6.5 / 10), // L + (D * x / 10)
+      bountyClaimed: false,
       developerId: dev3.id,
       projectId: project2.id,
+      updatedAt: new Date(),
     },
   })
 
@@ -192,11 +220,13 @@ async function main() {
     where: { id: 'payout-1' },
     update: {},
     create: {
+      id: 'payout-1',
       amount: 200,
       developerId: dev1.id,
       projectId: project1.id,
       status: 'completed',
       transactionId: 'tx-001',
+      updatedAt: new Date(),
     },
   })
 
@@ -204,11 +234,13 @@ async function main() {
     where: { id: 'payout-2' },
     update: {},
     create: {
+      id: 'payout-2',
       amount: 150,
       developerId: dev2.id,
       projectId: project1.id,
       status: 'completed',
       transactionId: 'tx-002',
+      updatedAt: new Date(),
     },
   })
 

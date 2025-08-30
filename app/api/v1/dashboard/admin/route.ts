@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
     const projectsWithBudget = await prisma.project.findMany({
       select: {
         budget: true,
-        payouts: {
+        Payout: {
           select: { amount: true }
         }
       }
@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
 
     const totalBudget = projectsWithBudget.reduce((sum, project) => sum + project.budget, 0);
     const totalSpent = projectsWithBudget.reduce((sum, project) => 
-      sum + project.payouts.reduce((payoutSum, payout) => payoutSum + payout.amount, 0), 0
+      sum + project.Payout.reduce((payoutSum, payout) => payoutSum + payout.amount, 0), 0
     );
 
     // Get top performing developers
@@ -58,16 +58,16 @@ export async function GET(request: NextRequest) {
         githubId: true,
         _count: {
           select: {
-            prs: true,
-            payouts: true,
+            PullRequest: true,
+            Payout: true,
           }
         },
-        payouts: {
+        Payout: {
           select: { amount: true }
         }
       },
       orderBy: {
-        payouts: {
+        Payout: {
           _count: 'desc'
         }
       },
@@ -75,15 +75,15 @@ export async function GET(request: NextRequest) {
     });
 
     const topDevelopersWithStats = topDevelopers.map(dev => {
-      const totalEarnings = dev.payouts.reduce((sum, payout) => sum + payout.amount, 0);
+      const totalEarnings = dev.Payout.reduce((sum, payout) => sum + payout.amount, 0);
       return {
         id: dev.id,
         username: dev.username,
         githubId: dev.githubId,
         totalEarnings,
-        totalPRs: dev._count.prs,
-        totalPayouts: dev._count.payouts,
-        averageEarnings: dev._count.payouts > 0 ? totalEarnings / dev._count.payouts : 0,
+        totalPRs: dev._count.PullRequest,
+        totalPayouts: dev._count.Payout,
+        averageEarnings: dev._count.Payout > 0 ? totalEarnings / dev._count.Payout : 0,
       };
     });
 
@@ -95,33 +95,33 @@ export async function GET(request: NextRequest) {
         budget: true,
         _count: {
           select: {
-            pullRequests: true,
-            payouts: true,
+            PullRequest: true,
+            Payout: true,
           }
         },
-        pullRequests: {
+        PullRequest: {
           select: {
             merged: true,
             score: true,
           }
         },
-        payouts: {
+        Payout: {
           select: { amount: true }
         }
       }
     });
 
     const projectPerformanceWithStats = projectPerformance.map(project => {
-      const mergedPRs = project.pullRequests.filter(pr => pr.merged).length;
-      const totalPayouts = project.payouts.reduce((sum, p) => sum + p.amount, 0);
-      const averageScore = project.pullRequests.length > 0 ? 
-        project.pullRequests.reduce((sum, pr) => sum + pr.score, 0) / project.pullRequests.length : 0;
+      const mergedPRs = project.PullRequest.filter(pr => pr.merged).length;
+      const totalPayouts = project.Payout.reduce((sum, p) => sum + p.amount, 0);
+      const averageScore = project.PullRequest.length > 0 ? 
+        project.PullRequest.reduce((sum, pr) => sum + pr.score, 0) / project.PullRequest.length : 0;
       
       return {
         id: project.id,
         name: project.name,
         budget: project.budget,
-        totalPRs: project._count.pullRequests,
+        totalPRs: project._count.PullRequest,
         mergedPRs,
         totalPayouts,
         budgetUtilization: project.budget > 0 ? (totalPayouts / project.budget) * 100 : 0,

@@ -39,7 +39,7 @@ export async function GET(
       prisma.pullRequest.findMany({
         where: { developerId: developerIdNum },
         include: {
-          project: {
+          Project: {
             select: {
               id: true,
               name: true,
@@ -51,7 +51,7 @@ export async function GET(
       prisma.payout.findMany({
         where: { developerId: developerIdNum },
         include: {
-          project: {
+          Project: {
             select: {
               id: true,
               name: true,
@@ -99,7 +99,7 @@ export async function GET(
     // Project breakdown
     const projectBreakdown = await prisma.project.findMany({
       where: {
-        pullRequests: {
+        PullRequest: {
           some: {
             developerId: developerIdNum
           }
@@ -108,19 +108,19 @@ export async function GET(
       include: {
         _count: {
           select: {
-            pullRequests: {
+            PullRequest: {
               where: {
                 developerId: developerIdNum
               }
             },
-            payouts: {
+            Payout: {
               where: {
                 developerId: developerIdNum
               }
             }
           }
         },
-        pullRequests: {
+        PullRequest: {
           where: {
             developerId: developerIdNum
           },
@@ -136,11 +136,11 @@ export async function GET(
     const projectBreakdownWithStats = projectBreakdown.map(project => ({
       id: project.id,
       name: project.name,
-      totalPRs: project._count.pullRequests,
-      mergedPRs: project.pullRequests.filter(pr => pr.merged).length,
-      totalEarnings: project.pullRequests.reduce((sum, pr) => sum + pr.amountPaid, 0),
-      averageScore: project.pullRequests.length > 0 ? 
-        project.pullRequests.reduce((sum, pr) => sum + pr.score, 0) / project.pullRequests.length : 0,
+      totalPRs: project._count.PullRequest,
+      mergedPRs: project.PullRequest.filter(pr => pr.merged).length,
+      totalEarnings: project.PullRequest.reduce((sum, pr) => sum + pr.amountPaid, 0),
+      averageScore: project.PullRequest.length > 0 ? 
+        project.PullRequest.reduce((sum, pr) => sum + pr.score, 0) / project.PullRequest.length : 0,
     }));
 
     // Recent PRs with details
@@ -148,7 +148,7 @@ export async function GET(
       id: pr.id,
       prNumber: pr.prNumber,
       title: pr.title,
-      projectName: pr.project.name,
+      projectName: pr.Project.name,
       merged: pr.merged,
       amountPaid: pr.amountPaid,
       score: pr.score,
@@ -159,7 +159,7 @@ export async function GET(
     const recentPayoutDetails = recentPayouts.slice(0, 5).map(payout => ({
       id: payout.id,
       amount: payout.amount,
-      projectName: payout.project.name,
+      projectName: payout.Project.name,
       paidAt: payout.paidAt,
     }));
 

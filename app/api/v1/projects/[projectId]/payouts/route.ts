@@ -70,14 +70,14 @@ export async function GET(
     const payouts = await prisma.payout.findMany({
       where,
       include: {
-        developer: {
+        Developer: {
           select: {
             id: true,
             username: true,
             githubId: true,
           }
         },
-        project: {
+        Project: {
           select: {
             id: true,
             name: true,
@@ -168,18 +168,21 @@ export async function POST(
 
     const newPayout = await prisma.payout.create({
       data: {
-        ...payoutData,
+        id: `payout-${projectIdNum}-${Date.now()}`,
+        amount: payoutData.amount,
+        developerId: payoutData.developerId,
         projectId: projectIdNum,
+        updatedAt: new Date(),
       },
       include: {
-        developer: {
+        Developer: {
           select: {
             id: true,
             username: true,
             githubId: true,
           }
         },
-        project: {
+        Project: {
           select: {
             id: true,
             name: true,

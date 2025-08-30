@@ -40,14 +40,14 @@ export async function GET(
         }
       },
       include: {
-        developer: {
+        Developer: {
           select: {
             id: true,
             username: true,
             githubId: true,
           }
         },
-        project: {
+        Project: {
           select: {
             id: true,
             name: true,
@@ -104,6 +104,14 @@ export async function PATCH(
           projectId: projectIdNum,
           prNumber: prNumberNum
         }
+      },
+      include: {
+        Project: {
+          select: {
+            lowestBounty: true,
+            highestBounty: true,
+          }
+        }
       }
     });
 
@@ -114,6 +122,22 @@ export async function PATCH(
       );
     }
 
+    // If score is being updated, recalculate bounty amount
+    let finalUpdateData: any = { ...updateData, updatedAt: new Date() };
+    
+    if (updateData.score !== undefined) {
+      const lowestBounty = existingPR.Project.lowestBounty;
+      const highestBounty = existingPR.Project.highestBounty;
+      const difference = highestBounty - lowestBounty;
+      const newScore = updateData.score;
+      
+      const newBountyAmount = lowestBounty + (difference * newScore / 10);
+      finalUpdateData = {
+        ...finalUpdateData,
+        bountyAmount: newBountyAmount,
+      };
+    }
+
     const updatedPR = await prisma.pullRequest.update({
       where: {
         projectId_prNumber: {
@@ -121,19 +145,21 @@ export async function PATCH(
           prNumber: prNumberNum
         }
       },
-      data: updateData,
+      data: finalUpdateData,
       include: {
-        developer: {
+        Developer: {
           select: {
             id: true,
             username: true,
             githubId: true,
           }
         },
-        project: {
+        Project: {
           select: {
             id: true,
             name: true,
+            lowestBounty: true,
+            highestBounty: true,
           }
         }
       }
@@ -142,7 +168,17 @@ export async function PATCH(
     return NextResponse.json({
       success: true,
       data: updatedPR,
-      message: 'Pull request updated successfully'
+      message: 'Pull request updated successfully',
+      ...(updateData.score !== undefined && {
+        bountyCalculation: {
+          lowestBounty: existingPR.Project.lowestBounty,
+          highestBounty: existingPR.Project.highestBounty,
+          difference: existingPR.Project.highestBounty - existingPR.Project.lowestBounty,
+          score: updateData.score,
+          calculatedBounty: finalUpdateData.bountyAmount,
+          formula: `L + (D × x / 10) = ${existingPR.Project.lowestBounty} + (${existingPR.Project.highestBounty - existingPR.Project.lowestBounty} × ${updateData.score} / 10) = ${finalUpdateData.bountyAmount}`
+        }
+      })
     });
   } catch (error) {
     if (error instanceof z.ZodError) {

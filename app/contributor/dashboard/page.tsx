@@ -24,14 +24,14 @@ interface Project {
   tags: string[]
   createdAt: string
   updatedAt: string
-  admin: {
+  Admin: {
     id: number
     name: string | null
     email: string
   }
   _count: {
-    pullRequests: number
-    payouts: number
+    PullRequest: number
+    Payout: number
   }
 }
 
@@ -305,12 +305,12 @@ export default function Page() {
                           <div className="flex items-center gap-2">
                             <GitBranch className="h-4 w-4 text-muted-foreground" />
                             <span className="text-muted-foreground">PRs:</span>
-                            <span className="font-medium">{project._count.pullRequests}</span>
+                            <span className="font-medium">{project._count.PullRequest}</span>
                           </div>
                           <div className="flex items-center gap-2">
                             <Users className="h-4 w-4 text-muted-foreground" />
                             <span className="text-muted-foreground">Payouts:</span>
-                            <span className="font-medium">{project._count.payouts}</span>
+                            <span className="font-medium">{project._count.Payout}</span>
                           </div>
                         </div>
 
@@ -325,7 +325,7 @@ export default function Page() {
                         {/* Admin Info */}
                         <div className="text-xs text-muted-foreground">
                           <span>Managed by: </span>
-                          <span className="font-medium">{project.admin.name || project.admin.email}</span>
+                          <span className="font-medium">{project.Admin.name || project.Admin.email}</span>
                         </div>
 
                         {/* Action Buttons */}

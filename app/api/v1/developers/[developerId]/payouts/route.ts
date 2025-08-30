@@ -65,7 +65,14 @@ export async function GET(
     const payouts = await prisma.payout.findMany({
       where,
       include: {
-        project: {
+        Developer: {
+          select: {
+            id: true,
+            username: true,
+            githubId: true,
+          }
+        },
+        Project: {
           select: {
             id: true,
             name: true,
@@ -80,10 +87,10 @@ export async function GET(
     // Calculate summary
     const totalAmount = payouts.reduce((sum, payout) => sum + payout.amount, 0);
 
-    // Group by project
+    // Get project breakdown
     const projectBreakdown = await prisma.project.findMany({
       where: {
-        payouts: {
+        PullRequest: {
           some: {
             developerId: developerIdNum
           }
@@ -92,14 +99,29 @@ export async function GET(
       include: {
         _count: {
           select: {
-            payouts: {
+            PullRequest: {
+              where: {
+                developerId: developerIdNum
+              }
+            },
+            Payout: {
               where: {
                 developerId: developerIdNum
               }
             }
           }
         },
-        payouts: {
+        PullRequest: {
+          where: {
+            developerId: developerIdNum
+          },
+          select: {
+            score: true,
+            amountPaid: true,
+            merged: true,
+          }
+        },
+        Payout: {
           where: {
             developerId: developerIdNum
           },
@@ -112,15 +134,20 @@ export async function GET(
     });
 
     const projectBreakdownWithStats = projectBreakdown.map(project => {
-      const projectPayouts = project.payouts;
-      const totalProjectAmount = projectPayouts.reduce((sum, p) => sum + p.amount, 0);
+      const projectPayouts = project.Payout;
+      const totalProjectAmount = projectPayouts.reduce((sum: number, p: any) => sum + p.amount, 0);
       
       return {
         id: project.id,
         name: project.name,
-        totalAmount: totalProjectAmount,
-        payoutCount: project._count.payouts,
-        averagePayout: project._count.payouts > 0 ? totalProjectAmount / project._count.payouts : 0,
+        totalPRs: project._count.PullRequest,
+        mergedPRs: project.PullRequest.filter(pr => pr.merged).length,
+        totalEarnings: project.PullRequest.reduce((sum, pr) => sum + pr.amountPaid, 0),
+        averageScore: project.PullRequest.length > 0 ? 
+          project.PullRequest.reduce((sum, pr) => sum + pr.score, 0) / project.PullRequest.length : 0,
+        payoutCount: project._count.Payout,
+        totalPayouts: totalProjectAmount,
+        averagePayout: project._count.Payout > 0 ? totalProjectAmount / project._count.Payout : 0,
       };
     });
 
