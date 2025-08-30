@@ -7,6 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { Menu, Github } from "lucide-react"
 import { AppSidebarContent } from "./app-sidebar"
+import { RealWalletConnect } from "./real-wallet-connect"
 
 export function AppHeader() {
   const [open, setOpen] = useState(false)
@@ -38,6 +39,7 @@ export function AppHeader() {
         </div>
 
         <div className="flex items-center gap-2">
+          <RealWalletConnect />
           <Button asChild variant="ghost" size="icon" aria-label="GitHub Repository">
             <a href="#" aria-label="Open project GitHub">
               <Github className="h-5 w-5" />

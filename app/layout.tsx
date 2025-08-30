@@ -7,6 +7,7 @@ import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Suspense } from "react"
 import AuthSessionProvider from "@/components/auth-session-provider"
+import { ClientWalletProvider } from "@/components/client-wallet-provider"
 
 export const metadata: Metadata = {
   title: "v0 App",
@@ -24,10 +25,12 @@ export default function RootLayout({
       <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable} antialiased min-h-dvh`}>
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false} disableTransitionOnChange>
           <AuthSessionProvider>
-            <Suspense fallback={null}>
-              {children}
-              <Analytics />
-            </Suspense>
+            <ClientWalletProvider>
+              <Suspense fallback={null}>
+                {children}
+                <Analytics />
+              </Suspense>
+            </ClientWalletProvider>
           </AuthSessionProvider>
         </ThemeProvider>
       </body>
