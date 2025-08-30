@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { RefreshCw, Search, GitBranch, GitPullRequest, GitMerge, DollarSign, Star, ExternalLink, Calendar } from 'lucide-react'
 import Link from 'next/link'
+import ClaimRewardDialog from './claim-reward-dialog'
 
 export type ContributorPR = {
   id: number
@@ -71,7 +72,9 @@ export default function ContributorPRs() {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [projectFilter, setProjectFilter] = useState('all')
-  const [claimingBounty, setClaimingBounty] = useState<number | null>(null)
+
+  const [claimRewardDialogOpen, setClaimRewardDialogOpen] = useState(false)
+  const [selectedPR, setSelectedPR] = useState<ContributorPR | null>(null)
 
   const fetchPRs = async () => {
     try {
@@ -198,73 +201,9 @@ export default function ContributorPRs() {
   const handleClaimBounty = async (pr: ContributorPR) => {
     if (!pr.merged || pr.bountyClaimed) return
 
-    setClaimingBounty(pr.id)
-    try {
-      const baseUrl = process.env.NODE_ENV === 'development' 
-        ? 'http://localhost:3000' 
-        : process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
-      
-      // Prepare the request data
-      const requestData = {
-        prNumber: pr.prNumber,
-        repository: pr.Project.name, // This contains the repository name like "owner/repo"
-        additions: pr.additions,
-        deletions: pr.deletions,
-        hasTests: pr.hasTests,
-        description: pr.description,
-        commits: [], // Empty array for now since commits field doesn't exist yet
-        githubUrl: pr.linkedIssue // This contains the GitHub PR URL
-      };
-      
-      console.log('Sending bounty claim request:', requestData);
-      console.log('Request URL:', `${baseUrl}/api/v1/contributor/github-prs/claim-bounty`);
-      
-      // Call the new GitHub PR bounty claim endpoint
-      const response = await fetch(
-        `${baseUrl}/api/v1/contributor/github-prs/claim-bounty`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(requestData)
-        }
-      )
-
-      console.log('Response status:', response.status);
-      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
-      
-      let result;
-      try {
-        const responseText = await response.text();
-        console.log('Response text:', responseText);
-        
-        if (responseText.trim()) {
-          result = JSON.parse(responseText);
-        } else {
-          result = { success: false, message: 'Empty response from server' };
-        }
-      } catch (error) {
-        console.error('Failed to parse response:', error);
-        result = { success: false, message: 'Invalid response from server' };
-      }
-      
-      if (result.success) {
-        console.log('Bounty claimed successfully:', result)
-        // Show success message with bounty amount
-        alert(`Bounty claimed successfully! Amount: $${result.data.bountyAmount}`)
-        // Refresh the PRs data to show updated bounty status
-        await fetchPRs()
-      } else {
-        console.error('Failed to claim bounty:', result.message)
-        alert(`Failed to claim bounty: ${result.message}`)
-      }
-    } catch (error) {
-      console.error('Error claiming bounty:', error)
-      alert('Error claiming bounty. Please try again.')
-    } finally {
-      setClaimingBounty(null)
-    }
+    // Open the claim reward dialog instead of making API call directly
+    setSelectedPR(pr)
+    setClaimRewardDialogOpen(true)
   }
 
   return (
@@ -560,45 +499,30 @@ export default function ContributorPRs() {
                           {pr.merged && !pr.bountyClaimed ? (
                             <Button
                               onClick={() => handleClaimBounty(pr)}
-                              disabled={claimingBounty === pr.id}
                               size="sm"
                               className="bg-green-600 hover:bg-green-700 text-white"
                             >
-                              {claimingBounty === pr.id ? (
-                                <div className="flex items-center gap-2">
-                                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
-                                  Claiming...
-                                </div>
-                              ) : (
-                                <div className="flex items-center gap-2">
-                                  <DollarSign className="h-3 w-3" />
-                                  Claim Reward
-                                </div>
-                              )}
+                              <div className="flex items-center gap-2">
+                                <DollarSign className="h-3 w-3" />
+                                Claim Bounty
+                              </div>
                             </Button>
                           ) : pr.bountyClaimed ? (
                             <Badge variant="outline" className="text-green-600 border-green-600">
                               ✓ Claimed
                             </Badge>
                           ) : (
-                            <Button
+                                                        <Button
                               onClick={() => handleClaimBounty(pr)}
-                              disabled={claimingBounty === pr.id || !pr.merged}
+                              disabled={!pr.merged}
                               size="sm"
                               variant={pr.merged ? "default" : "outline"}
                               className={pr.merged ? "bg-blue-600 hover:bg-blue-700 text-white" : ""}
                             >
-                              {claimingBounty === pr.id ? (
-                                <div className="flex items-center gap-2">
-                                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
-                                  Claiming...
-                                </div>
-                              ) : (
-                                <div className="flex items-center gap-2">
-                                  <DollarSign className="h-3 w-3" />
-                                  {pr.merged ? "Claim Reward" : "Merge Required"}
-                                </div>
-                              )}
+                              <div className="flex items-center gap-2">
+                                <DollarSign className="h-3 w-3" />
+                                {pr.merged ? "Claim Bounty" : "Merge Required"}
+                              </div>
                             </Button>
                           )}
                         </div>
@@ -620,6 +544,36 @@ export default function ContributorPRs() {
             </div>
           )}
         </>
+      )}
+
+      {/* Claim Reward Dialog */}
+      {selectedPR && (
+        <ClaimRewardDialog
+          isOpen={claimRewardDialogOpen}
+          onClose={() => {
+            setClaimRewardDialogOpen(false)
+            setSelectedPR(null)
+          }}
+          pr={{
+            id: selectedPR.id,
+            prNumber: selectedPR.prNumber,
+            title: selectedPR.title,
+            repository: selectedPR.Project.name, // Use project name as repository
+            additions: selectedPR.additions,
+            deletions: selectedPR.deletions,
+            hasTests: selectedPR.hasTests,
+            description: selectedPR.description,
+            commits: [], // Empty array for now
+            linkedIssue: selectedPR.linkedIssue,
+            Project: {
+              id: selectedPR.Project.id,
+              name: selectedPR.Project.name,
+              repoUrl: selectedPR.Project.repoUrl,
+              lowestBounty: selectedPR.Project.lowestBounty || 100,
+              highestBounty: selectedPR.Project.highestBounty || 1000
+            }
+          }}
+        />
       )}
     </div>
   )

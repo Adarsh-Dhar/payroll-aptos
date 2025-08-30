@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    const { prNumber, repository, additions, deletions, hasTests, description, commits } = body;
+    const { prNumber, repository, additions, deletions, hasTests, description, commits, bountyAmount: providedBountyAmount } = body;
     
     console.log('Parsed claim request data:', {
       prNumber,
@@ -41,7 +41,8 @@ export async function POST(request: NextRequest) {
       deletions,
       hasTests,
       description,
-      commits
+      commits,
+      providedBountyAmount
     });
 
     if (!prNumber || !repository) {
@@ -135,7 +136,7 @@ export async function POST(request: NextRequest) {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            prUrl: githubUrl || `https://github.com/${repository}/pull/${prNumber}`,
+            prUrl: `https://github.com/${repository}/pull/${prNumber}`,
             repoUrl: `https://github.com/${repository}`,
             owner: repoOwner,
             repo: repoName,
@@ -180,19 +181,30 @@ export async function POST(request: NextRequest) {
       console.log('Fallback contribution score:', contributionScore);
     }
     
-    // Calculate bounty using the formula: L + (D * x / 10)
-    // where L = lowest bounty, D = difference between highest and lowest, x = score
+    // Calculate difference for logging purposes
     const difference = highestBounty - lowestBounty;
-    const bountyAmount = lowestBounty + (difference * contributionScore / 10);
     
-    console.log('=== BOUNTY CALCULATION ===');
-    console.log(`PR Number: ${prNumber}`);
-    console.log(`Repository: ${repository}`);
-    console.log(`Project found: ${project ? 'Yes' : 'No'}`);
-    console.log(`Database bounty range: $${lowestBounty} - $${highestBounty}`);
-    console.log(`Contribution Score: ${contributionScore}`);
-    console.log(`Bounty Formula: L + (D × x / 10) = ${lowestBounty} + (${difference} × ${contributionScore} / 10)`);
-    console.log(`Calculated Bounty: $${bountyAmount}`);
+    // Use provided bounty amount if available, otherwise calculate it
+    let bountyAmount;
+    if (providedBountyAmount && typeof providedBountyAmount === 'number' && providedBountyAmount > 0) {
+      bountyAmount = providedBountyAmount;
+      console.log('=== USING PROVIDED BOUNTY AMOUNT ===');
+      console.log(`Provided bounty amount: $${bountyAmount}`);
+      console.log(`Project bounty range: $${lowestBounty} - $${highestBounty}`);
+      console.log(`Difference: $${difference}`);
+    } else {
+      // Calculate bounty using the formula: L + (D * x / 10)
+      // where L = lowest bounty, D = difference between highest and lowest, x = score
+      bountyAmount = lowestBounty + (difference * contributionScore / 10);
+      console.log('=== BOUNTY CALCULATION ===');
+      console.log(`PR Number: ${prNumber}`);
+      console.log(`Repository: ${repository}`);
+      console.log(`Project found: ${project ? 'Yes' : 'No'}`);
+      console.log(`Database bounty range: $${lowestBounty} - $${highestBounty}`);
+      console.log(`Contribution Score: ${contributionScore}`);
+      console.log(`Bounty Formula: L + (D × x / 10) = ${lowestBounty} + (${difference} × ${contributionScore} / 10)`);
+      console.log(`Calculated Bounty: $${bountyAmount}`);
+    }
     
     // Additional PR details for debugging
     console.log(`Additions: ${additions}`);
