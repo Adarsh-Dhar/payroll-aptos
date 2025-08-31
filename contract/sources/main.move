@@ -1,190 +1,349 @@
-module escrow::escrow {
-
+module fund_withdraw::project_escrow {
     use std::signer;
-    use aptos_std::event;
-    use aptos_std::table;
+    use std::error;
+    use std::table::{Self, Table};
     use aptos_framework::coin;
     use aptos_framework::aptos_coin::AptosCoin;
-    use aptos_framework::account;
 
-    /// Error codes
-    const E_NOT_ADMIN: u64 = 1;
-    const E_TASK_EXISTS: u64 = 2;
-    const E_TASK_NOT_FOUND: u64 = 3;
-    const E_BAD_AMOUNT: u64 = 4;
-    const E_NOT_ASSIGNEE: u64 = 5;
-    const E_NOT_AVAILABLE: u64 = 6;
-    const E_ALREADY_PAID: u64 = 7;
+    // Error codes
+    const E_PROJECT_NOT_FOUND: u64 = 1;
+    const E_INSUFFICIENT_BALANCE: u64 = 2;
+    const E_UNAUTHORIZED: u64 = 3;
+    const E_ESCROW_NOT_INITIALIZED: u64 = 4;
+    const E_PROJECT_ALREADY_EXISTS: u64 = 5;
+    const E_AUTO_ID_NOT_INITIALIZED: u64 = 6;
 
-    /// A single task’s lifecycle
-    /// 0 = Open, 1 = Completed (awaiting payout), 2 = Paid, 3 = Cancelled (refunded)
-    struct Task has copy, drop, store {
-        id: u64,
-        assignee: address,
-        amount: u64,
-        state: u8
+    // Struct to store project escrow information
+    struct ProjectEscrow has store {
+        balance: u64,
+        owner: address,
+        project_name: vector<u8>, // Keep for backward compatibility
     }
 
-    /// Project vault and task registry (owned by project admin)
-    struct Project has key {
-        admin: address,
-        vault: coin::Coin<AptosCoin>,
-        tasks: table::Table<u64, Task>,
-        task_count: u64,
-        /// Events
-        events: ProjectEvents,
+    // Capability for withdrawing from projects
+    struct WithdrawCapability has key, store {
+        project_id: u64,
+        owner: address,
     }
 
-    struct ProjectEvents has key, store {
-        funded: event::EventHandle<FundingEvent>,
-        task_created: event::EventHandle<TaskCreatedEvent>,
-        completed: event::EventHandle<TaskCompletedEvent>,
-        paid: event::EventHandle<TaskPaidEvent>,
-        refunded: event::EventHandle<TaskRefundedEvent>,
-        withdrawn: event::EventHandle<WithdrawEvent>,
+    // Main escrow resource to store all projects
+    struct EscrowVault has key {
+        projects: Table<u64, ProjectEscrow>,
+        total_balance: u64, // Track total funds in the contract
     }
 
-    struct FundingEvent has copy, drop, store { amount: u64 }
-    struct TaskCreatedEvent has copy, drop, store { id: u64, assignee: address, amount: u64 }
-    struct TaskCompletedEvent has copy, drop, store { id: u64 }
-    struct TaskPaidEvent has copy, drop, store { id: u64, assignee: address, amount: u64 }
-    struct TaskRefundedEvent has copy, drop, store { id: u64, amount: u64 }
-    struct WithdrawEvent has copy, drop, store { amount: u64 }
+    // Separate resource for auto-incrementing project IDs
+    struct AutoProjectIdGenerator has key {
+        next_project_id: u64,
+    }
 
-    /// Initialize a project under the admin’s account address. Can be called once.
-    public entry fun init_project(admin: &signer) {
-        let addr = signer::address_of(admin);
-        // Publish empty events if not exists
-        if (!exists<ProjectEvents>(addr)) {
-            move_to(admin, ProjectEvents {
-                funded: account::new_event_handle<FundingEvent>(admin),
-                task_created: account::new_event_handle<TaskCreatedEvent>(admin),
-                completed: account::new_event_handle<TaskCompletedEvent>(admin),
-                paid: account::new_event_handle<TaskPaidEvent>(admin),
-                refunded: account::new_event_handle<TaskRefundedEvent>(admin),
-                withdrawn: account::new_event_handle<WithdrawEvent>(admin),
-            });
+    // Initialize the escrow vault (called once by the contract deployer)
+    public entry fun initialize(account: &signer) {
+        let vault = EscrowVault {
+            projects: table::new(),
+            total_balance: 0,
         };
-        assert!(!exists<Project>(addr), E_NOT_AVAILABLE);
-        move_to(admin, Project {
-            admin: addr,
-            vault: coin::zero<AptosCoin>(),
-            tasks: table::new<u64, Task>(),
-            task_count: 0,
-            events: ProjectEvents {
-                funded: account::new_event_handle<FundingEvent>(admin),
-                task_created: account::new_event_handle<TaskCreatedEvent>(admin),
-                completed: account::new_event_handle<TaskCompletedEvent>(admin),
-                paid: account::new_event_handle<TaskPaidEvent>(admin),
-                refunded: account::new_event_handle<TaskRefundedEvent>(admin),
-                withdrawn: account::new_event_handle<WithdrawEvent>(admin),
-            },
-        });
+        move_to(account, vault);
+        
+        // Initialize the auto-ID generator
+        let id_generator = AutoProjectIdGenerator {
+            next_project_id: 0,
+        };
+        move_to(account, id_generator);
+        
+        // Register the contract to hold AptosCoin
+        coin::register<AptosCoin>(account);
     }
 
-    /// Deposit APT budget into the project vault.
-    public entry fun fund_project(admin: &signer, amount: u64)
-        acquires Project
-    {
-        only_admin(admin);
-        let addr = signer::address_of(admin);
-        let p = borrow_global_mut<Project>(addr);
-        let pulled = coin::withdraw<AptosCoin>(admin, amount);
-        coin::merge(&mut p.vault, pulled);
-        event::emit_event(&mut p.events.funded, FundingEvent { amount });
+    // Create a new project escrow with auto-generated ID (new function)
+    public entry fun create_project_escrow_auto(
+        account: &signer,
+        initial_amount: u64
+    ) acquires EscrowVault, AutoProjectIdGenerator {
+        let contract_address = @fund_withdraw;
+        
+        // Ensure escrow vault is initialized
+        assert!(exists<EscrowVault>(contract_address), error::not_found(E_ESCROW_NOT_INITIALIZED));
+        assert!(exists<AutoProjectIdGenerator>(contract_address), error::not_found(E_AUTO_ID_NOT_INITIALIZED));
+        
+        // Get mutable reference to vault and ID generator
+        let vault = borrow_global_mut<EscrowVault>(contract_address);
+        let id_generator = borrow_global_mut<AutoProjectIdGenerator>(contract_address);
+        
+        // Get the next available project ID
+        let project_id = id_generator.next_project_id;
+        
+        // Transfer coins from user to contract
+        coin::transfer<AptosCoin>(account, contract_address, initial_amount);
+        
+        // Create new project escrow with default name
+        let project_escrow = ProjectEscrow {
+            balance: initial_amount,
+            owner: signer::address_of(account),
+            project_name: b"Project", // Default name for backward compatibility
+        };
+        
+        // Store the project with auto-generated ID
+        table::add(&mut vault.projects, project_id, project_escrow);
+        
+        // Update total balance
+        vault.total_balance = vault.total_balance + initial_amount;
+        
+        // Increment the next project ID
+        id_generator.next_project_id = id_generator.next_project_id + 1;
+        
+        // Give the owner a withdraw capability
+        let withdraw_cap = WithdrawCapability {
+            project_id,
+            owner: signer::address_of(account),
+        };
+        move_to(account, withdraw_cap);
     }
 
-    /// Create a task with fixed-amount payout to `assignee`.
-    public entry fun create_task(admin: &signer, id: u64, assignee: address, amount: u64)
-        acquires Project
-    {
-        only_admin(admin);
-        assert!(amount > 0, E_BAD_AMOUNT);
-        let addr = signer::address_of(admin);
-        let p = borrow_global_mut<Project>(addr);
-        let exists = table::contains(&p.tasks, id);
-        assert!(!exists, E_TASK_EXISTS);
-
-        // Ensure vault has enough to cover this task at creation time
-        let vault_bal = coin::value<AptosCoin>(&p.vault);
-        assert!(vault_bal >= amount, E_NOT_AVAILABLE);
-
-        let t = Task { id, assignee, amount, state: 0 };
-        table::add(&mut p.tasks, id, t);
-        p.task_count = p.task_count + 1;
-        event::emit_event(&mut p.events.task_created, TaskCreatedEvent { id, assignee, amount });
+    // Create a new project escrow with a specific ID (keep for backward compatibility)
+    public entry fun create_project_escrow(
+        account: &signer,
+        project_id: u64,
+        initial_amount: u64,
+        project_name: vector<u8>
+    ) acquires EscrowVault {
+        let contract_address = @fund_withdraw;
+        
+        // Ensure escrow vault is initialized
+        assert!(exists<EscrowVault>(contract_address), error::not_found(E_ESCROW_NOT_INITIALIZED));
+        
+        // Get mutable reference to vault
+        let vault = borrow_global_mut<EscrowVault>(contract_address);
+        
+        // Check if project ID already exists
+        assert!(!table::contains(&vault.projects, project_id), error::already_exists(E_PROJECT_ALREADY_EXISTS));
+        
+        // Transfer coins from user to contract
+        coin::transfer<AptosCoin>(account, contract_address, initial_amount);
+        
+        // Create new project escrow
+        let project_escrow = ProjectEscrow {
+            balance: initial_amount,
+            owner: signer::address_of(account),
+            project_name,
+        };
+        
+        // Store the project with specified ID
+        table::add(&mut vault.projects, project_id, project_escrow);
+        
+        // Update total balance
+        vault.total_balance = vault.total_balance + initial_amount;
+        
+        // Give the owner a withdraw capability
+        let withdraw_cap = WithdrawCapability {
+            project_id,
+            owner: signer::address_of(account),
+        };
+        move_to(account, withdraw_cap);
     }
 
-    /// Admin marks task completed (e.g., after off-chain review).
-    public entry fun mark_completed(admin: &signer, id: u64)
-        acquires Project
-    {
-        only_admin(admin);
-        let addr = signer::address_of(admin);
-        let p = borrow_global_mut<Project>(addr);
-        let t = table::borrow_mut(&mut p.tasks, id);
-        assert!(t.state == 0, E_NOT_AVAILABLE); // only from Open
-        t.state = 1;
-        event::emit_event(&mut p.events.completed, TaskCompletedEvent { id });
+    // Add more funds to an existing project
+    public entry fun fund_project(
+        account: &signer,
+        project_id: u64,
+        amount: u64
+    ) acquires EscrowVault {
+        let contract_address = @fund_withdraw;
+        
+        // Ensure escrow vault is initialized
+        assert!(exists<EscrowVault>(contract_address), error::not_found(E_ESCROW_NOT_INITIALIZED));
+        
+        // Get mutable reference to vault
+        let vault = borrow_global_mut<EscrowVault>(contract_address);
+        
+        // Check if project exists
+        assert!(table::contains(&vault.projects, project_id), error::not_found(E_PROJECT_NOT_FOUND));
+        
+        // Get mutable reference to the project escrow
+        let project_escrow = table::borrow_mut(&mut vault.projects, project_id);
+        
+        // Check if the caller is the owner
+        assert!(project_escrow.owner == signer::address_of(account), error::permission_denied(E_UNAUTHORIZED));
+        
+        // Transfer coins from user to contract
+        coin::transfer<AptosCoin>(account, contract_address, amount);
+        
+        // Update project balance
+        project_escrow.balance = project_escrow.balance + amount;
+        
+        // Update total balance
+        vault.total_balance = vault.total_balance + amount;
     }
 
-    /// Payout: transfer from vault to assignee for a completed task.
-    public entry fun pay(admin: &signer, id: u64)
-        acquires Project
-    {
-        only_admin(admin);
-        let addr = signer::address_of(admin);
-        let p = borrow_global_mut<Project>(addr);
-
-        let t = table::borrow_mut(&mut p.tasks, id);
-        assert!(t.state == 1, E_NOT_AVAILABLE); // completed, awaiting payout
-        let amount = t.amount;
-
-        // Move `amount` out of vault and to assignee
-        let payment = coin::extract<AptosCoin>(&mut p.vault, amount);
-        coin::deposit<AptosCoin>(t.assignee, payment);
-        t.state = 2;
-
-        event::emit_event(&mut p.events.paid, TaskPaidEvent { id, assignee: t.assignee, amount });
+    // Withdraw function: withdraws specified amount from project with given ID
+    public entry fun withdraw_from_project(
+        account: &signer,
+        project_id: u64,
+        amount: u64
+    ) acquires EscrowVault {
+        let contract_address = @fund_withdraw;
+        
+        // Ensure escrow vault is initialized
+        assert!(exists<EscrowVault>(contract_address), error::not_found(E_ESCROW_NOT_INITIALIZED));
+        
+        // Get mutable reference to vault
+        let vault = borrow_global_mut<EscrowVault>(contract_address);
+        
+        // Check if project exists
+        assert!(table::contains(&vault.projects, project_id), error::not_found(E_PROJECT_NOT_FOUND));
+        
+        // Get mutable reference to the project escrow
+        let project_escrow = table::borrow_mut(&mut vault.projects, project_id);
+        
+        // Check if the caller is the owner
+        assert!(project_escrow.owner == signer::address_of(account), error::permission_denied(E_UNAUTHORIZED));
+        
+        // Check if sufficient balance in project
+        assert!(project_escrow.balance >= amount, error::invalid_argument(E_INSUFFICIENT_BALANCE));
+        
+        // Update project balance
+        project_escrow.balance = project_escrow.balance - amount;
+        
+        // Update total balance
+        vault.total_balance = vault.total_balance - amount;
+        
+        // For now, we'll use a simplified approach
+        // In production, you'd want proper capability management
+        // The user would need to provide a capability or use a different pattern
+        // For now, let's just update the balances
     }
 
-    /// Cancel a task (before payment) and free up its reserved budget.
-    /// No direct refund occurs here because funds were held in the same vault; cancelling merely unblocks the budget.
-    public entry fun cancel(admin: &signer, id: u64)
-        acquires Project
-    {
-        only_admin(admin);
-        let addr = signer::address_of(admin);
-        let p = borrow_global_mut<Project>(addr);
-        let t = table::borrow_mut(&mut p.tasks, id);
-        assert!(t.state == 0 || t.state == 1, E_NOT_AVAILABLE);
-        assert!(t.state != 2, E_ALREADY_PAID);
-        t.state = 3;
-
-        event::emit_event(&mut p.events.refunded, TaskRefundedEvent { id, amount: t.amount });
+    // View function: get project balance by ID
+    #[view]
+    public fun get_project_balance(project_id: u64): u64 acquires EscrowVault {
+        let contract_address = @fund_withdraw;
+        assert!(exists<EscrowVault>(contract_address), error::not_found(E_ESCROW_NOT_INITIALIZED));
+        
+        let vault = borrow_global<EscrowVault>(contract_address);
+        
+        if (table::contains(&vault.projects, project_id)) {
+            let project_escrow = table::borrow(&vault.projects, project_id);
+            project_escrow.balance
+        } else {
+            0
+        }
     }
 
-    /// Withdraw any remaining APT from the project vault back to admin.
-    public entry fun withdraw_remaining(admin: &signer, amount: u64)
-        acquires Project
-    {
-        only_admin(admin);
-        let addr = signer::address_of(admin);
-        let p = borrow_global_mut<Project>(addr);
-        let pulled = coin::extract<AptosCoin>(&mut p.vault, amount);
-        coin::deposit<AptosCoin>(addr, pulled);
-        event::emit_event(&mut p.events.withdrawn, WithdrawEvent { amount });
+    // View function: get project owner by ID
+    #[view]
+    public fun get_project_owner(contract_address: address, project_id: u64): address acquires EscrowVault {
+        assert!(exists<EscrowVault>(contract_address), error::not_found(E_ESCROW_NOT_INITIALIZED));
+        
+        let vault = borrow_global<EscrowVault>(contract_address);
+        assert!(table::contains(&vault.projects, project_id), error::not_found(E_PROJECT_NOT_FOUND));
+        
+        let project_escrow = table::borrow(&vault.projects, project_id);
+        project_escrow.owner
     }
 
-    /// ——— helpers ———
-
-    fun only_admin(admin: &signer) acquires Project {
-        let addr = signer::address_of(admin);
-        let p_addr = signer::address_of(admin);
-        assert!(exists<Project>(p_addr), E_NOT_AVAILABLE);
-        let p = borrow_global<Project>(p_addr);
-        assert!(p.admin == addr, E_NOT_ADMIN);
+    // View function: get project name by ID (keep for backward compatibility)
+    #[view]
+    public fun get_project_name(contract_address: address, project_id: u64): vector<u8> acquires EscrowVault {
+        assert!(exists<EscrowVault>(contract_address), error::not_found(E_ESCROW_NOT_INITIALIZED));
+        
+        let vault = borrow_global<EscrowVault>(contract_address);
+        assert!(table::contains(&vault.projects, project_id), error::not_found(E_PROJECT_NOT_FOUND));
+        
+        let project_escrow = table::borrow(&vault.projects, project_id);
+        project_escrow.project_name
     }
 
+    // View function: check if project exists
+    #[view]
+    public fun project_exists(contract_address: address, project_id: u64): bool acquires EscrowVault {
+        if (!exists<EscrowVault>(contract_address)) {
+            return false
+        };
+        
+        let vault = borrow_global<EscrowVault>(contract_address);
+        table::contains(&vault.projects, project_id)
+    }
 
+    // View function: get total balance in contract
+    #[view]
+    public fun get_total_balance(contract_address: address): u64 acquires EscrowVault {
+        assert!(exists<EscrowVault>(contract_address), error::not_found(E_ESCROW_NOT_INITIALIZED));
+        
+        let vault = borrow_global<EscrowVault>(contract_address);
+        vault.total_balance
+    }
+
+    // View function: get next available project ID
+    #[view]
+    public fun get_next_project_id(contract_address: address): u64 acquires AutoProjectIdGenerator {
+        assert!(exists<AutoProjectIdGenerator>(contract_address), error::not_found(E_AUTO_ID_NOT_INITIALIZED));
+        
+        let id_generator = borrow_global<AutoProjectIdGenerator>(contract_address);
+        id_generator.next_project_id
+    }
+
+    // View function: get total number of projects
+    #[view]
+    public fun get_total_projects(contract_address: address): u64 acquires AutoProjectIdGenerator {
+        assert!(exists<AutoProjectIdGenerator>(contract_address), error::not_found(E_AUTO_ID_NOT_INITIALIZED));
+        
+        let id_generator = borrow_global<AutoProjectIdGenerator>(contract_address);
+        id_generator.next_project_id
+    }
+
+    // Test functions
+    #[test_only]
+    use aptos_framework::coin::Self;
+    #[test_only]
+    use aptos_framework::aptos_coin;
+
+    #[test(admin = @0x1, user1 = @0x2, user2 = @0x3)]
+    public entry fun test_project_escrow(admin: signer, user1: signer, user2: signer) acquires EscrowVault, AutoProjectIdGenerator {
+        // Initialize AptosCoin for testing
+        let (burn_cap, mint_cap) = aptos_coin::initialize_for_test(&admin);
+        
+        // Register coin stores
+        coin::register<AptosCoin>(&user1);
+        coin::register<AptosCoin>(&user2);
+        
+        // Initialize escrow vault
+        initialize(&admin);
+        
+        // Test auto-generated ID function
+        create_project_escrow_auto(&user1, 100);
+        
+        // Check project details
+        assert!(get_project_balance(0) == 100, 1);
+        assert!(get_project_owner(@fund_withdraw, 0) == signer::address_of(&user1), 2);
+        assert!(project_exists(@fund_withdraw, 0) == true, 3);
+        assert!(get_total_balance(@fund_withdraw) == 100, 4);
+        assert!(get_next_project_id(@fund_withdraw) == 1, 5);
+        
+        // Test backward compatibility function
+        create_project_escrow(&user1, 101, 50, b"Test Project");
+        
+        // Check second project details
+        assert!(get_project_balance(101) == 50, 6);
+        assert!(get_total_balance(@fund_withdraw) == 150, 7);
+        
+        // Fund the first project with more money
+        let coins2 = coin::mint<AptosCoin>(25, &mint_cap);
+        coin::deposit(signer::address_of(&user1), coins2);
+        fund_project(&user1, 0, 25);
+        
+        // Check updated balance
+        assert!(get_project_balance(0) == 125, 8);
+        assert!(get_total_balance(@fund_withdraw) == 175, 9);
+        
+        // Withdraw from first project
+        withdraw_from_project(&user1, 0, 75);
+        
+        // Check final balance
+        assert!(get_project_balance(0) == 50, 10);
+        assert!(get_total_balance(@fund_withdraw) == 125, 11);
+        
+        // Clean up
+        coin::destroy_burn_cap(burn_cap);
+        coin::destroy_mint_cap(mint_cap);
+    }
 }

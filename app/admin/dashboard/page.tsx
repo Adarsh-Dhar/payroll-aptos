@@ -4,8 +4,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { DollarSign, GitPullRequest, Users, FolderOpen, TrendingUp } from "lucide-react"
+import { DollarSign, GitPullRequest, Users, FolderOpen, TrendingUp, Shield, Coins, Wallet, AlertCircle } from "lucide-react"
 import { CreateProjectDialog } from "@/components/create-project-dialog"
+import { FundProjectDialog } from "@/components/fund-project-dialog"
+import { ContractTestPanel } from "@/components/contract-test-panel"
+import { projectEscrowClient, projectEscrowUtils } from "@/lib/contract"
 
 // Define the data types based on our API response
 interface DashboardData {
@@ -57,6 +60,25 @@ interface DashboardData {
   }
 }
 
+// Project Escrow data structure from contract
+interface ProjectEscrowData {
+  projectId: number
+  balance: number
+  owner: string
+  projectName: string
+  status: 'active' | 'completed' | 'paused'
+  lastActivity: string
+}
+
+// Contract status interface
+interface ContractStatus {
+  isVaultInitialized: boolean
+  isGeneratorInitialized: boolean
+  nextProjectId: number
+  totalProjects: number
+  totalBalance: number
+}
+
 async function getDashboardData(): Promise<DashboardData | null> {
   try {
     // Use absolute URL for server-side fetch
@@ -86,8 +108,86 @@ async function getDashboardData(): Promise<DashboardData | null> {
   }
 }
 
+// Get contract status and project escrow data
+async function getContractData(): Promise<{
+  contractStatus: ContractStatus | null
+  projectEscrows: ProjectEscrowData[]
+}> {
+  try {
+    // Check contract initialization status
+    const isVaultInitialized = await projectEscrowClient.isEscrowVaultInitialized()
+    const isGeneratorInitialized = await projectEscrowClient.isAutoProjectIdGeneratorInitialized()
+    
+    if (!isVaultInitialized || !isGeneratorInitialized) {
+      return {
+        contractStatus: {
+          isVaultInitialized,
+          isGeneratorInitialized,
+          nextProjectId: 0,
+          totalProjects: 0,
+          totalBalance: 0
+        },
+        projectEscrows: []
+      }
+    }
+
+    // Get contract data
+    const [nextProjectId, totalProjects, totalBalance] = await Promise.all([
+      projectEscrowClient.getNextProjectId(),
+      projectEscrowClient.getTotalProjects(),
+      projectEscrowClient.getTotalBalance()
+    ])
+
+    const contractStatus: ContractStatus = {
+      isVaultInitialized,
+      isGeneratorInitialized,
+      nextProjectId,
+      totalProjects,
+      totalBalance
+    }
+
+    // Get project escrow data for each project
+    const projectEscrows: ProjectEscrowData[] = []
+    
+    for (let i = 0; i < totalProjects; i++) {
+      try {
+        const [balance, owner, projectName, exists] = await Promise.all([
+          projectEscrowClient.getProjectBalance(i),
+          projectEscrowClient.getProjectOwner(i),
+          projectEscrowClient.getProjectName(i),
+          projectEscrowClient.projectExists(i)
+        ])
+
+        if (exists && owner) {
+          projectEscrows.push({
+            projectId: i,
+            balance,
+            owner,
+            projectName: projectName || `Project ${i}`,
+            status: balance > 0 ? 'active' : 'completed',
+            lastActivity: new Date().toISOString().split('T')[0] // Placeholder - in real app would track actual activity
+          })
+        }
+      } catch (error) {
+        console.warn(`Error fetching project ${i} data:`, error)
+        // Continue with other projects
+      }
+    }
+
+    return { contractStatus, projectEscrows }
+  } catch (error) {
+    console.error('Error fetching contract data:', error)
+    return { contractStatus: null, projectEscrows: [] }
+  }
+}
+
 export default async function Page() {
-  const data = await getDashboardData()
+  const [data, contractData] = await Promise.all([
+    getDashboardData(),
+    getContractData()
+  ])
+
+  const { contractStatus, projectEscrows } = contractData
 
   if (!data) {
     return (
@@ -108,6 +208,11 @@ export default async function Page() {
     )
   }
 
+  // Calculate escrow statistics from real contract data
+  const totalEscrowBalance = projectEscrows.reduce((sum, escrow) => sum + escrow.balance, 0)
+  const activeEscrows = projectEscrows.filter(escrow => escrow.status === 'active').length
+  const completedEscrows = projectEscrows.filter(escrow => escrow.status === 'completed').length
+
   return (
     <div className="min-h-dvh bg-background text-foreground">
       <AppHeader />
@@ -126,11 +231,40 @@ export default async function Page() {
                     Admin Dashboard
                   </h1>
                   <p className="text-muted-foreground mt-1 text-sm leading-relaxed">
-                    Monitor platform performance, budgets, and developer activity.
+                    Monitor platform performance, budgets, developer activity, and project escrows.
                   </p>
                 </div>
-                <CreateProjectDialog />
+                <div className="flex gap-2">
+                  <CreateProjectDialog />
+                  <FundProjectDialog />
+                </div>
               </div>
+            </section>
+
+            {/* Contract Status Alert */}
+            {contractStatus && (!contractStatus.isVaultInitialized || !contractStatus.isGeneratorInitialized) && (
+              <section>
+                <Card className="border-destructive/50 bg-destructive/5">
+                  <CardContent className="pt-6">
+                    <div className="flex items-center gap-3">
+                      <AlertCircle className="h-5 w-5 text-destructive" />
+                      <div>
+                        <h3 className="font-medium text-destructive">Contract Not Fully Initialized</h3>
+                        <p className="text-sm text-muted-foreground">
+                          {!contractStatus.isVaultInitialized && "Escrow vault not initialized. "}
+                          {!contractStatus.isGeneratorInitialized && "Auto project ID generator not initialized. "}
+                          Please ensure the contract is properly deployed and initialized.
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </section>
+            )}
+
+            {/* Contract Test Panel */}
+            <section>
+              <ContractTestPanel />
             </section>
 
             {/* Overview Cards */}
@@ -161,8 +295,11 @@ export default async function Page() {
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-semibold">
-                    {data.overview.totalProjects}
+                    {contractStatus?.totalProjects || 0}
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    {contractStatus?.isVaultInitialized ? 'Contract active' : 'Contract inactive'}
+                  </p>
                 </CardContent>
               </Card>
 
@@ -196,6 +333,156 @@ export default async function Page() {
                   </p>
                 </CardContent>
               </Card>
+            </section>
+
+            {/* Project Escrow Overview */}
+            <section>
+              <h2 className="text-lg font-medium mb-4">Project Escrow Overview</h2>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+                <Card className="border bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950/20 dark:to-blue-900/20">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
+                      <Shield className="h-4 w-4 text-blue-600" />
+                      Active Escrows
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-semibold text-blue-600">
+                      {activeEscrows}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {projectEscrows.length} total projects
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <Card className="border bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950/20 dark:to-green-900/20">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
+                      <Coins className="h-4 w-4 text-green-600" />
+                      Total Escrow Balance
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-semibold text-green-600">
+                      {projectEscrowUtils.formatApt(totalEscrowBalance)}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {projectEscrowUtils.formatApt(totalEscrowBalance)} available
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <Card className="border bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-950/20 dark:to-purple-900/20">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
+                      <TrendingUp className="h-4 w-4 text-purple-600" />
+                      Next Project ID
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-semibold text-purple-600">
+                      {contractStatus?.nextProjectId || 0}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Auto-generated IDs
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <Card className="border bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-950/20 dark:to-orange-900/20">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
+                      <Wallet className="h-4 w-4 text-orange-600" />
+                      Completed Projects
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-semibold text-orange-600">
+                      {completedEscrows}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Zero balance projects
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
+            </section>
+
+            {/* Project Escrow Details */}
+            <section>
+              <h2 className="text-lg font-medium mb-4">Project Escrow Details</h2>
+              {projectEscrows.length === 0 ? (
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="text-center py-8">
+                      <Shield className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                      <h3 className="text-lg font-medium mb-2">No Projects Found</h3>
+                      <p className="text-muted-foreground">
+                        {contractStatus?.isVaultInitialized 
+                          ? "No projects have been created yet. Create your first project to get started."
+                          : "Contract not initialized. Please deploy and initialize the contract first."
+                        }
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <Card>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Project ID</TableHead>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Owner</TableHead>
+                        <TableHead>Balance</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Last Activity</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {projectEscrows.map((escrow) => (
+                        <TableRow key={escrow.projectId}>
+                          <TableCell className="font-mono text-sm">
+                            #{escrow.projectId}
+                          </TableCell>
+                          <TableCell>
+                            <div className="font-medium">
+                              {escrow.projectName}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="font-mono text-sm text-muted-foreground">
+                              {projectEscrowUtils.formatAddress(escrow.owner)}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="font-medium text-green-600">
+                              {projectEscrowUtils.formatApt(escrow.balance)}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge 
+                              variant={escrow.status === 'active' ? 'default' : 
+                                     escrow.status === 'completed' ? 'secondary' : 'outline'}
+                              className={escrow.status === 'active' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100' :
+                                       escrow.status === 'completed' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100' :
+                                       'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-100'}
+                            >
+                              {escrow.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="text-sm text-muted-foreground">
+                              {escrow.lastActivity}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </Card>
+              )}
             </section>
 
             {/* Performance Metrics */}
@@ -232,14 +519,17 @@ export default async function Page() {
 
               <Card>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm text-muted-foreground">Average PR Score</CardTitle>
+                  <CardTitle className="text-sm text-muted-foreground">Contract Status</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-semibold text-indigo-400">
-                    {data.quickStats.averagePRScore.toFixed(1)}
+                  <div className="text-2xl font-semibold text-indigo-400 mb-2">
+                    {contractStatus?.isVaultInitialized && contractStatus?.isGeneratorInitialized ? 'Active' : 'Inactive'}
                   </div>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Quality score out of 10
+                  <p className="text-xs text-muted-foreground">
+                    {contractStatus?.isVaultInitialized && contractStatus?.isGeneratorInitialized 
+                      ? 'Contract fully operational'
+                      : 'Contract needs initialization'
+                    }
                   </p>
                 </CardContent>
               </Card>

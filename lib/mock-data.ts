@@ -1,4 +1,21 @@
-import type { PR } from "@/components/pr-table"
+// Define PR type locally since pr-table.tsx was deleted
+export type PR = {
+  id: string
+  title: string
+  score: number
+  amountEarned: number
+  currency: "₹" | "$" | "€"
+  status: "streaming" | "paid"
+  ratePerSec?: number
+  description?: string
+  linkedIssue?: string | null
+  linesAdded?: number
+  linesDeleted?: number
+  coverage?: number
+  merged?: boolean
+  approvals?: number
+  scoreBreakdown?: { label: string; value: number }[]
+}
 
 export const mockPRs: PR[] = [
   {

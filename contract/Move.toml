@@ -1,12 +1,10 @@
 [package]
-name = "contract"
+name = "project_escrow"
 version = "1.0.0"
 authors = []
 
 [addresses]
-escrow = "_"
-
-[dev-addresses]
+fund_withdraw = "0x215ede66d2cf89d0e9544af066a15c1ce22c5b6fc14773f10eb4551fa35e6c8a"
 
 [dependencies.AptosFramework]
 git = "https://github.com/aptos-labs/aptos-framework.git"
