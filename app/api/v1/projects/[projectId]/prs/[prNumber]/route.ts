@@ -18,10 +18,10 @@ const updatePRSchema = z.object({
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { projectId: string; prNumber: string } }
+  { params }: { params: Promise<{ projectId: string; prNumber: string }> }
 ) {
   try {
-    const { projectId, prNumber } = params;
+    const { projectId, prNumber } = await params;
     const projectIdNum = parseInt(projectId);
     const prNumberNum = parseInt(prNumber);
 
@@ -81,10 +81,10 @@ export async function GET(
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { projectId: string; prNumber: string } }
+  { params }: { params: Promise<{ projectId: string; prNumber: string }> }
 ) {
   try {
-    const { projectId, prNumber } = params;
+    const { projectId, prNumber } = await params;
     const projectIdNum = parseInt(projectId);
     const prNumberNum = parseInt(prNumber);
     const body = await request.json();

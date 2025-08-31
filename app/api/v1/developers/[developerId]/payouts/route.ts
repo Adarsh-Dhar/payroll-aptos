@@ -14,10 +14,10 @@ const querySchema = z.object({
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { developerId: string } }
+  { params }: { params: Promise<{ developerId: string }> }
 ) {
   try {
-    const { developerId } = params;
+    const { developerId } = await params;
     const developerIdNum = parseInt(developerId);
     const { searchParams } = new URL(request.url);
     const { page, limit, projectId, startDate, endDate } = querySchema.parse(Object.fromEntries(searchParams));

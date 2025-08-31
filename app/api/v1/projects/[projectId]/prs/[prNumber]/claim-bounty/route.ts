@@ -5,10 +5,10 @@ const prisma = new PrismaClient();
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { projectId: string; prNumber: string } }
+  { params }: { params: Promise<{ projectId: string; prNumber: string }> }
 ) {
   try {
-    const { projectId, prNumber } = params;
+    const { projectId, prNumber } = await params;
     const projectIdNum = parseInt(projectId);
     const prNumberNum = parseInt(prNumber);
 

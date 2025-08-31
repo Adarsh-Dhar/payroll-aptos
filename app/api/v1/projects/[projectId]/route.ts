@@ -19,10 +19,10 @@ const updateProjectSchema = z.object({
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { projectId: string } }
+  { params }: { params: Promise<{ projectId: string }> }
 ) {
   try {
-    const { projectId } = params;
+    const { projectId } = await params;
     const projectIdNum = parseInt(projectId);
 
     if (isNaN(projectIdNum)) {
@@ -104,11 +104,11 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { projectId: string } }
+  { params }: { params: Promise<{ projectId: string }> }
 ) {
   try {
     // TODO: Implement admin authentication middleware
-    const { projectId } = params;
+    const { projectId } = await params;
     const projectIdNum = parseInt(projectId);
     const body = await request.json();
     const updateData = updateProjectSchema.parse(body);
