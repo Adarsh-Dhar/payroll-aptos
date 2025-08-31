@@ -7,7 +7,7 @@ export const WalletProvider = ({ children }: PropsWithChildren) => {
     <AptosWalletAdapterProvider
       autoConnect={false}
       dappConfig={{
-        network: Network.TESTNET,
+        network: Network.TESTNET, // Explicitly set to TESTNET
       }}
       onError={(error) => {
         console.log("error", error);

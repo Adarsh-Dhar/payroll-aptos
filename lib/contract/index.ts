@@ -18,13 +18,29 @@ import dotenv from "dotenv";
 dotenv.config();
 
 // Contract configuration
-const CONTRACT_ADDRESS = "0x1"; // Default Aptos framework address, should be updated with actual deployed contract address
+const CONTRACT_ADDRESS = "0x215ede66d2cf89d0e9544af066a15c1ce22c5b6fc14773f10eb4551fa35e6c8a"; // Deployed contract address on testnet
 const CONTRACT_MODULE = "project_escrow";
-const APTOS_NETWORK: Network = NetworkToNetworkName[process.env.APTOS_NETWORK ?? Network.DEVNET];
 
-// Set up the client
-const config = new AptosConfig({ network: APTOS_NETWORK });
+// Explicitly set to TESTNET to match where the contract is deployed
+const APTOS_NETWORK: Network = Network.TESTNET;
+
+// Set up the client with explicit testnet configuration
+const config = new AptosConfig({ 
+  network: APTOS_NETWORK,
+  // Explicitly set the REST API URL to ensure we're using testnet with v1 endpoint
+  fullnode: "https://fullnode.testnet.aptoslabs.com/v1"
+});
 const aptos = new Aptos(config);
+
+// Debug logging to verify network configuration
+console.log("Contract client initialized with:", {
+  network: APTOS_NETWORK,
+  contractAddress: CONTRACT_ADDRESS,
+  contractModule: CONTRACT_MODULE,
+  fullnodeUrl: "https://fullnode.testnet.aptoslabs.com/v1",
+  configNetwork: config.network,
+  configFullnode: config.fullnode
+});
 
 // Types matching the Move contract
 export interface ProjectEscrow {
@@ -515,6 +531,166 @@ export class ProjectEscrowContractClient {
 
     } catch (error) {
       console.error('Error creating and funding project:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error occurred'
+      };
+    }
+  }
+
+  /**
+   * Create and fund a project using wallet adapter (new method)
+   * @param accountAddress - The account address
+   * @param signAndSubmitTransaction - The wallet adapter's signAndSubmitTransaction function
+   * @param amountInApt - Amount in APT (will be converted to octas)
+   * @returns Transaction hash and status
+   */
+  async createAndFundProjectWithWallet(
+    accountAddress: string,
+    signAndSubmitTransaction: (transaction: any) => Promise<any>,
+    amountInApt: number
+  ): Promise<{ success: boolean; transactionHash?: string; error?: string }> {
+    try {
+      console.log("Creating project escrow with wallet adapter:", {
+        accountAddress,
+        amountInApt,
+        contractAddress: this.contractAddress,
+        contractModule: this.contractModule
+      });
+
+      // Check if escrow vault is initialized
+      const isVaultInitialized = await this.isEscrowVaultInitialized();
+      console.log("Escrow vault initialized:", isVaultInitialized);
+      
+      if (!isVaultInitialized) {
+        return { 
+          success: false, 
+          error: 'Escrow vault not initialized' 
+        };
+      }
+
+      // Check if auto project ID generator is initialized
+      const isGeneratorInitialized = await this.isAutoProjectIdGeneratorInitialized();
+      console.log("Auto project ID generator initialized:", isGeneratorInitialized);
+      
+      if (!isGeneratorInitialized) {
+        return { 
+          success: false, 
+          error: 'Auto project ID generator not initialized' 
+        };
+      }
+
+      // Convert APT to octas
+      const amountInOctas = projectEscrowUtils.aptToOctas(amountInApt);
+      
+      console.log(`Creating and funding project: ${amountInApt} APT = ${amountInOctas} octas`);
+
+      // Create the transaction data in the format expected by wallet adapter
+      const transactionData = {
+        data: {
+          function: `${this.contractAddress}::${this.contractModule}::create_project_escrow_auto`,
+          typeArguments: [],
+          functionArguments: [amountInOctas.toString()]
+        },
+        options: {
+          maxGasAmount: "2000",  // Extremely low gas limit for affordability
+          gasUnitPrice: "100"    // Minimum gas price for Testnet
+        }
+      };
+
+      console.log("Transaction data prepared:", transactionData);
+      console.log("Transaction data type:", typeof transactionData);
+      console.log("Transaction data keys:", Object.keys(transactionData));
+
+      // Sign and submit using wallet adapter
+      console.log("About to call signAndSubmitTransaction...");
+      const pendingTxn = await signAndSubmitTransaction(transactionData);
+      console.log("Transaction submitted:", pendingTxn);
+      
+      // Wait for transaction to complete
+      const result = await this.aptos.waitForTransaction({
+        transactionHash: pendingTxn.hash,
+      });
+      
+      console.log("Transaction completed:", result);
+      
+      return {
+        success: true,
+        transactionHash: result.hash
+      };
+
+    } catch (error) {
+      console.error('Error creating and funding project with wallet:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error occurred'
+      };
+    }
+  }
+
+  /**
+   * Fund an existing project using wallet adapter (new method)
+   * @param accountAddress - The account address
+   * @param signAndSubmitTransaction - The wallet adapter's signAndSubmitTransaction function
+   * @param projectId - The ID of the project to fund
+   * @param amountInApt - Amount in APT (will be converted to octas)
+   * @returns Transaction hash and status
+   */
+  async fundProjectWithWallet(
+    accountAddress: string,
+    signAndSubmitTransaction: (transaction: any) => Promise<any>,
+    projectId: number,
+    amountInApt: number
+  ): Promise<{ success: boolean; transactionHash?: string; error?: string }> {
+    try {
+      // Check if project exists
+      const projectExists = await this.projectExists(projectId);
+      if (!projectExists) {
+        return { 
+          success: false, 
+          error: 'Project not found' 
+        };
+      }
+
+      // Convert APT to octas
+      const amountInOctas = projectEscrowUtils.aptToOctas(amountInApt);
+      
+      console.log(`Funding project ${projectId}: ${amountInApt} APT = ${amountInOctas} octas`);
+
+      // Create the transaction data in the format expected by wallet adapter
+      const transactionData = {
+        data: {
+          function: `${this.contractAddress}::${this.contractModule}::fund_project`,
+          typeArguments: [],
+          functionArguments: [projectId.toString(), amountInOctas.toString()]
+        },
+        options: {
+          maxGasAmount: "2000",  // Extremely low gas limit for affordability
+          gasUnitPrice: "100"    // Minimum gas price for Testnet
+        }
+      };
+
+      console.log("Transaction data prepared:", transactionData);
+      console.log("Transaction data type:", typeof transactionData);
+      console.log("Transaction data keys:", Object.keys(transactionData));
+
+      // Sign and submit using wallet adapter
+      console.log("About to call signAndSubmitTransaction...");
+      const pendingTxn = await signAndSubmitTransaction(transactionData);
+      console.log("Transaction submitted:", pendingTxn);
+      
+      // Wait for transaction to complete
+      const result = await this.aptos.waitForTransaction({
+        transactionHash: pendingTxn.hash,
+      });
+      
+      return {
+        success: true,
+        transactionHash: result.hash
+      };
+
+    } catch (error) {
+      console.error('Error funding project with wallet:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error occurred'

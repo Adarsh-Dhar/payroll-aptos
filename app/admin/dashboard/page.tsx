@@ -1,3 +1,5 @@
+"use client"
+
 import { AppHeader } from "@/components/app-header"
 import { AppSidebar } from "@/components/app-sidebar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -6,9 +8,10 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { DollarSign, GitPullRequest, Users, FolderOpen, TrendingUp, Shield, Coins, Wallet, AlertCircle } from "lucide-react"
 import { CreateProjectDialog } from "@/components/create-project-dialog"
-import { FundProjectDialog } from "@/components/fund-project-dialog"
 import { ContractTestPanel } from "@/components/contract-test-panel"
+import { InitializeVaultButton } from "@/components/initialize-vault-button"
 import { projectEscrowClient, projectEscrowUtils } from "@/lib/contract"
+import { useEffect, useState } from "react"
 
 // Define the data types based on our API response
 interface DashboardData {
@@ -79,115 +82,160 @@ interface ContractStatus {
   totalBalance: number
 }
 
-async function getDashboardData(): Promise<DashboardData | null> {
-  try {
-    // Use absolute URL for server-side fetch
-    const baseUrl = process.env.NODE_ENV === 'development' 
-      ? 'http://localhost:3000' 
-      : process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
-    
-    const response = await fetch(`${baseUrl}/api/v1/dashboard/admin`, {
-      cache: 'no-store', // Always fetch fresh data
-    })
-    
-    if (!response.ok) {
-      console.error('Dashboard API error:', response.status, response.statusText)
-      return null
-    }
-    
-    const result = await response.json()
-    if (result.success) {
-      return result.data
-    } else {
-      console.error('Dashboard API error:', result.message)
-      return null
-    }
-  } catch (error) {
-    console.error('Dashboard fetch error:', error)
-    return null
-  }
-}
+export default function Page() {
+  const [data, setData] = useState<DashboardData | null>(null)
+  const [contractData, setContractData] = useState<{
+    contractStatus: ContractStatus | null
+    projectEscrows: ProjectEscrowData[]
+  } | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-// Get contract status and project escrow data
-async function getContractData(): Promise<{
-  contractStatus: ContractStatus | null
-  projectEscrows: ProjectEscrowData[]
-}> {
-  try {
-    // Check contract initialization status
-    const isVaultInitialized = await projectEscrowClient.isEscrowVaultInitialized()
-    const isGeneratorInitialized = await projectEscrowClient.isAutoProjectIdGeneratorInitialized()
-    
-    if (!isVaultInitialized || !isGeneratorInitialized) {
-      return {
-        contractStatus: {
-          isVaultInitialized,
-          isGeneratorInitialized,
-          nextProjectId: 0,
-          totalProjects: 0,
-          totalBalance: 0
-        },
-        projectEscrows: []
+  // Get contract status and project escrow data
+  const getContractData = async (): Promise<{
+    contractStatus: ContractStatus | null
+    projectEscrows: ProjectEscrowData[]
+  }> => {
+    try {
+      // Check contract initialization status
+      const isVaultInitialized = await projectEscrowClient.isEscrowVaultInitialized()
+      const isGeneratorInitialized = await projectEscrowClient.isAutoProjectIdGeneratorInitialized()
+      
+      if (!isVaultInitialized || !isGeneratorInitialized) {
+        return {
+          contractStatus: {
+            isVaultInitialized,
+            isGeneratorInitialized,
+            nextProjectId: 0,
+            totalProjects: 0,
+            totalBalance: 0
+          },
+          projectEscrows: []
+        }
       }
+
+      // Get contract data
+      const [nextProjectId, totalProjects, totalBalance] = await Promise.all([
+        projectEscrowClient.getNextProjectId(),
+        projectEscrowClient.getTotalProjects(),
+        projectEscrowClient.getTotalBalance()
+      ])
+
+      const contractStatus: ContractStatus = {
+        isVaultInitialized,
+        isGeneratorInitialized,
+        nextProjectId,
+        totalProjects,
+        totalBalance
+      }
+
+      // Get project escrow data for each project
+      const projectEscrows: ProjectEscrowData[] = []
+      
+      for (let i = 0; i < totalProjects; i++) {
+        try {
+          const [balance, owner, projectName, exists] = await Promise.all([
+            projectEscrowClient.getProjectBalance(i),
+            projectEscrowClient.getProjectOwner(i),
+            projectEscrowClient.getProjectName(i),
+            projectEscrowClient.projectExists(i)
+          ])
+
+          if (exists && owner) {
+            projectEscrows.push({
+              projectId: i,
+              balance,
+              owner,
+              projectName: projectName || `Project ${i}`,
+              status: balance > 0 ? 'active' : 'completed',
+              lastActivity: new Date().toISOString().split('T')[0] // Placeholder - in real app would track actual activity
+            })
+          }
+        } catch (error) {
+          console.warn(`Error fetching project ${i} data:`, error)
+          // Continue with other projects
+        }
+      }
+
+      return { contractStatus, projectEscrows }
+    } catch (error) {
+      console.error('Error fetching contract data:', error)
+      return { contractStatus: null, projectEscrows: [] }
     }
+  }
 
-    // Get contract data
-    const [nextProjectId, totalProjects, totalBalance] = await Promise.all([
-      projectEscrowClient.getNextProjectId(),
-      projectEscrowClient.getTotalProjects(),
-      projectEscrowClient.getTotalBalance()
-    ])
-
-    const contractStatus: ContractStatus = {
-      isVaultInitialized,
-      isGeneratorInitialized,
-      nextProjectId,
-      totalProjects,
-      totalBalance
-    }
-
-    // Get project escrow data for each project
-    const projectEscrows: ProjectEscrowData[] = []
-    
-    for (let i = 0; i < totalProjects; i++) {
+  useEffect(() => {
+    const fetchData = async () => {
       try {
-        const [balance, owner, projectName, exists] = await Promise.all([
-          projectEscrowClient.getProjectBalance(i),
-          projectEscrowClient.getProjectOwner(i),
-          projectEscrowClient.getProjectName(i),
-          projectEscrowClient.projectExists(i)
+        setLoading(true)
+        setError(null)
+        const [dashboardResult, contractResult] = await Promise.all([
+          fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/v1/dashboard/admin`).then(res => {
+            if (!res.ok) {
+              throw new Error(`HTTP error! status: ${res.status}`)
+            }
+            return res.json()
+          }),
+          getContractData()
         ])
 
-        if (exists && owner) {
-          projectEscrows.push({
-            projectId: i,
-            balance,
-            owner,
-            projectName: projectName || `Project ${i}`,
-            status: balance > 0 ? 'active' : 'completed',
-            lastActivity: new Date().toISOString().split('T')[0] // Placeholder - in real app would track actual activity
-          })
+        if (dashboardResult.success) {
+          setData(dashboardResult.data)
+        } else {
+          setError('Failed to fetch dashboard data.')
         }
-      } catch (error) {
-        console.warn(`Error fetching project ${i} data:`, error)
-        // Continue with other projects
+        setContractData(contractResult)
+             } catch (err) {
+         const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred'
+         setError(`Error fetching data: ${errorMessage}`)
+         console.error('Dashboard fetch error:', err)
+       } finally {
+        setLoading(false)
       }
     }
 
-    return { contractStatus, projectEscrows }
-  } catch (error) {
-    console.error('Error fetching contract data:', error)
-    return { contractStatus: null, projectEscrows: [] }
+    fetchData()
+    const interval = setInterval(fetchData, 30000) // Poll every 30 seconds
+    return () => clearInterval(interval)
+  }, [])
+
+  if (loading && !data) {
+    return (
+      <div className="min-h-dvh bg-background text-foreground">
+        <AppHeader />
+        <div className="mx-auto flex w-full max-w-7xl">
+          <AppSidebar className="hidden shrink-0 border-r bg-card/30 p-4 md:block md:w-64" />
+          <main className="flex-1 p-4 md:p-6">
+            <div className="flex flex-col items-center justify-center py-12">
+              <div className="text-center">
+                <h2 className="text-lg font-semibold text-destructive mb-2">Loading Dashboard</h2>
+                <p className="text-muted-foreground">Please wait while we fetch the latest data.</p>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+    )
   }
-}
 
-export default async function Page() {
-  const [data, contractData] = await Promise.all([
-    getDashboardData(),
-    getContractData()
-  ])
-
-  const { contractStatus, projectEscrows } = contractData
+  if (error) {
+    return (
+      <div className="min-h-dvh bg-background text-foreground">
+        <AppHeader />
+        <div className="mx-auto flex w-full max-w-7xl">
+          <AppSidebar className="hidden shrink-0 border-r bg-card/30 p-4 md:block md:w-64" />
+          <main className="flex-1 p-4 md:p-6">
+            <div className="flex flex-col items-center justify-center py-12">
+              <div className="text-center">
+                <h2 className="text-lg font-semibold text-destructive mb-2">Error Loading Dashboard</h2>
+                <p className="text-muted-foreground">{error}</p>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+    )
+  }
 
   if (!data) {
     return (
@@ -208,10 +256,12 @@ export default async function Page() {
     )
   }
 
+  const { contractStatus, projectEscrows } = contractData || { contractStatus: null, projectEscrows: [] }
+
   // Calculate escrow statistics from real contract data
-  const totalEscrowBalance = projectEscrows.reduce((sum, escrow) => sum + escrow.balance, 0)
-  const activeEscrows = projectEscrows.filter(escrow => escrow.status === 'active').length
-  const completedEscrows = projectEscrows.filter(escrow => escrow.status === 'completed').length
+  const totalEscrowBalance = projectEscrows.reduce((sum: number, escrow: ProjectEscrowData) => sum + escrow.balance, 0)
+  const activeEscrows = projectEscrows.filter((escrow: ProjectEscrowData) => escrow.status === 'active').length
+  const completedEscrows = projectEscrows.filter((escrow: ProjectEscrowData) => escrow.status === 'completed').length
 
   return (
     <div className="min-h-dvh bg-background text-foreground">
@@ -236,29 +286,26 @@ export default async function Page() {
                 </div>
                 <div className="flex gap-2">
                   <CreateProjectDialog />
-                  <FundProjectDialog />
                 </div>
               </div>
             </section>
 
-            {/* Contract Status Alert */}
+            {/* Contract Initialization */}
             {contractStatus && (!contractStatus.isVaultInitialized || !contractStatus.isGeneratorInitialized) && (
               <section>
-                <Card className="border-destructive/50 bg-destructive/5">
-                  <CardContent className="pt-6">
-                    <div className="flex items-center gap-3">
-                      <AlertCircle className="h-5 w-5 text-destructive" />
-                      <div>
-                        <h3 className="font-medium text-destructive">Contract Not Fully Initialized</h3>
-                        <p className="text-sm text-muted-foreground">
-                          {!contractStatus.isVaultInitialized && "Escrow vault not initialized. "}
-                          {!contractStatus.isGeneratorInitialized && "Auto project ID generator not initialized. "}
-                          Please ensure the contract is properly deployed and initialized.
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+                <InitializeVaultButton
+                  isVaultInitialized={contractStatus.isVaultInitialized}
+                  isGeneratorInitialized={contractStatus.isGeneratorInitialized}
+                  onInitialized={async () => {
+                    // Refresh contract data after initialization
+                    try {
+                      const newContractData = await getContractData()
+                      setContractData(newContractData)
+                    } catch (error) {
+                      console.error('Error refreshing contract data:', error)
+                    }
+                  }}
+                />
               </section>
             )}
 
@@ -441,7 +488,7 @@ export default async function Page() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {projectEscrows.map((escrow) => (
+                      {projectEscrows.map((escrow: ProjectEscrowData) => (
                         <TableRow key={escrow.projectId}>
                           <TableCell className="font-mono text-sm">
                             #{escrow.projectId}

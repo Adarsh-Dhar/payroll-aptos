@@ -96,19 +96,29 @@ export function FundProjectDialog() {
 			// First, validate the contract
 			setValidationMessage('Validating contract address...')
 			
-			const fundingStatus = await projectEscrowClient.getProjectFundingStatus(form.contractAddress.trim())
+			// Parse project ID from contract address (assuming it's a number)
+			const projectId = parseInt(form.contractAddress.trim())
+			if (isNaN(projectId)) {
+				throw new Error('Invalid project ID')
+			}
 			
-			if (!fundingStatus.isInitialized) {
-				throw new Error('Contract vault is not initialized at the specified address')
+			const fundingStatus = await projectEscrowClient.projectExists(projectId)
+			
+			if (!fundingStatus) {
+				throw new Error('Project not found')
 			}
 
 			setValidationMessage('Contract validated successfully!')
 			setFundingStatus('funding')
 
-			// Fund the contract
-			const fundingResult = await projectEscrowClient.fundProject(
-				'admin-wallet', // In real implementation, get from wallet connection
-				form.contractAddress.trim(),
+			// Fund the contract using wallet adapter
+			const fundingResult = await projectEscrowClient.fundProjectWithWallet(
+				'admin-wallet-address', // In real implementation, get from wallet connection
+				async (transaction: any) => {
+					// Mock implementation - replace with actual wallet adapter
+					return { hash: 'mock-transaction-hash' }
+				},
+				projectId,
 				Number(form.budget)
 			)
 
@@ -192,7 +202,7 @@ export function FundProjectDialog() {
 					<Alert className="border-green-200 bg-green-50">
 						<CheckCircle className="h-4 w-4 text-green-600" />
 						<AlertDescription className="text-green-800">
-							Contract funded successfully! Transaction: {vaultUtils.formatAddress(transactionHash)}
+							Contract funded successfully! Transaction: {projectEscrowUtils.formatAddress(transactionHash)}
 						</AlertDescription>
 					</Alert>
 				)
@@ -345,7 +355,7 @@ export function FundProjectDialog() {
 							<div className="flex justify-between text-sm">
 								<span>In Octas:</span>
 								<Badge variant="outline">
-									{form.budget ? vaultUtils.aptToOctas(Number(form.budget)).toLocaleString() : '0'} octas
+									{form.budget ? projectEscrowUtils.aptToOctas(Number(form.budget)).toLocaleString() : '0'} octas
 								</Badge>
 							</div>
 							<div className="flex justify-between text-sm">
@@ -356,7 +366,7 @@ export function FundProjectDialog() {
 								<div className="flex justify-between text-sm">
 									<span>Contract:</span>
 									<Badge variant="outline" className="font-mono">
-										{vaultUtils.formatAddress(form.contractAddress)}
+										{projectEscrowUtils.formatAddress(form.contractAddress)}
 									</Badge>
 								</div>
 							)}

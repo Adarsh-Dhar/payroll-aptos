@@ -12,6 +12,10 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { useWallet } from "@aptos-labs/wallet-adapter-react"
+import { projectEscrowClient, projectEscrowUtils } from "@/lib/contract"
+import { toast } from "sonner"
+import { Loader2, Wallet } from "lucide-react"
 
 type CreateProjectFormState = {
 	name: string
@@ -21,6 +25,7 @@ type CreateProjectFormState = {
 	lowestBounty: string
 	highestBounty: string
 	adminId: string
+	fundingAmount: string
 }
 
 export function CreateProjectDialog() {
@@ -34,12 +39,40 @@ export function CreateProjectDialog() {
 		lowestBounty: "",
 		highestBounty: "",
 		adminId: "",
+		fundingAmount: "",
 	})
+
+	const { connected, account, signAndSubmitTransaction } = useWallet()
 
 	async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
 		e.preventDefault()
+		
+		if (!connected || !account) {
+			toast.error("Please connect your wallet first")
+			return
+		}
+
 		setSubmitting(true)
 		try {
+			// Step 1: Create project escrow on blockchain
+			const fundingAmountOctas = projectEscrowUtils.aptToOctas(Number(form.fundingAmount))
+			
+			toast.info(`Creating project escrow on blockchain with ${form.fundingAmount} APT (${fundingAmountOctas} octas)...`)
+			
+			// Execute the real blockchain transaction using wallet adapter
+			const blockchainResult = await projectEscrowClient.createAndFundProjectWithWallet(
+				account.address.toString(),
+				signAndSubmitTransaction,
+				Number(form.fundingAmount)
+			)
+
+			if (!blockchainResult.success) {
+				throw new Error(`Blockchain transaction failed: ${blockchainResult.error}`)
+			}
+
+			toast.success(`Project escrow created successfully on blockchain! Transaction: ${blockchainResult.transactionHash}`)
+
+			// Step 2: Create project in database only after successful blockchain transaction
 			const payload = {
 				name: form.name.trim(),
 				description: form.description.trim() || undefined,
@@ -50,24 +83,67 @@ export function CreateProjectDialog() {
 				adminId: Number(form.adminId),
 			}
 
+			toast.info("Creating project in database...")
 			const res = await fetch("/api/v1/projects", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify(payload),
 			})
+			
 			const data = await res.json()
-			// Log the API response as requested
 			console.log("Create project response:", { status: res.status, data })
 
 			if (res.ok) {
+				toast.success("Project created successfully!")
 				setOpen(false)
-				setForm({ name: "", description: "", repoUrl: "", budget: "", lowestBounty: "", highestBounty: "", adminId: "" })
+				setForm({ 
+					name: "", 
+					description: "", 
+					repoUrl: "", 
+					budget: "", 
+					lowestBounty: "", 
+					highestBounty: "", 
+					adminId: "", 
+					fundingAmount: "" 
+				})
+			} else {
+				// If database creation fails, we should ideally handle the blockchain escrow
+				// For now, we'll just show an error and let the user know
+				throw new Error(data.message || "Failed to create project in database. Blockchain escrow was created successfully.")
 			}
 		} catch (err) {
 			console.error("Create project error:", err)
+			toast.error(err instanceof Error ? err.message : "Failed to create project")
 		} finally {
 			setSubmitting(false)
 		}
+	}
+
+	if (!connected) {
+		return (
+			<Dialog open={open} onOpenChange={setOpen}>
+				<DialogTrigger asChild>
+					<Button size="sm" className="h-9">Create Project</Button>
+				</DialogTrigger>
+				<DialogContent className="sm:max-w-[520px]">
+					<DialogHeader>
+						<DialogTitle>Wallet Required</DialogTitle>
+					</DialogHeader>
+					<div className="flex flex-col items-center justify-center py-8 space-y-4">
+						<Wallet className="h-12 w-12 text-muted-foreground" />
+						<div className="text-center">
+							<h3 className="text-lg font-medium mb-2">Connect Your Wallet</h3>
+							<p className="text-muted-foreground">
+								You need to connect your wallet to create a project and fund the escrow.
+							</p>
+						</div>
+						<Button onClick={() => setOpen(false)}>
+							Close
+						</Button>
+					</div>
+				</DialogContent>
+			</Dialog>
+		)
 	}
 
 	return (
@@ -80,6 +156,17 @@ export function CreateProjectDialog() {
 					<DialogTitle>Create a new project</DialogTitle>
 				</DialogHeader>
 				<form onSubmit={handleSubmit} className="space-y-4">
+					{/* Wallet Info */}
+					<div className="p-3 bg-muted/50 rounded-lg">
+						<div className="flex items-center gap-2 text-sm">
+							<Wallet className="h-4 w-4 text-green-600" />
+							<span className="text-muted-foreground">Connected:</span>
+							<span className="font-mono text-xs">
+								{account?.address.toString().slice(0, 6)}...{account?.address.toString().slice(-4)}
+							</span>
+						</div>
+					</div>
+
 					<div className="grid gap-2">
 						<Label htmlFor="name">Name</Label>
 						<Input
@@ -122,6 +209,22 @@ export function CreateProjectDialog() {
 							onChange={(e) => setForm((s) => ({ ...s, budget: e.target.value }))}
 							required
 						/>
+					</div>
+					<div className="grid gap-2">
+						<Label htmlFor="fundingAmount">Initial Funding Amount (APT)</Label>
+						<Input
+							id="fundingAmount"
+							type="number"
+							min="0.00000001"
+							step="0.00000001"
+							placeholder="10.0"
+							value={form.fundingAmount}
+							onChange={(e) => setForm((s) => ({ ...s, fundingAmount: e.target.value }))}
+							required
+						/>
+						<p className="text-xs text-muted-foreground">
+							This amount will be locked in the project escrow on the blockchain
+						</p>
 					</div>
 					<div className="grid grid-cols-2 gap-4">
 						<div className="grid gap-2">
@@ -169,7 +272,14 @@ export function CreateProjectDialog() {
 							Cancel
 						</Button>
 						<Button type="submit" disabled={submitting}>
-							{submitting ? "Creating..." : "Create"}
+							{submitting ? (
+								<>
+									<Loader2 className="mr-2 h-4 w-4 animate-spin" />
+									Creating...
+								</>
+							) : (
+								"Create Project"
+							)}
 						</Button>
 					</DialogFooter>
 				</form>

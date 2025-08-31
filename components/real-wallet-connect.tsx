@@ -11,13 +11,13 @@ export function RealWalletConnect() {
   const [open, setOpen] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
 
-  const availableWallets = wallets.filter(
+  const availableWallets = wallets?.filter(
     (wallet) => wallet.readyState === WalletReadyState.Installed
-  );
+  ) || [];
 
-  const notInstalledWallets = wallets.filter(
+  const notInstalledWallets = wallets?.filter(
     (wallet) => wallet.readyState === WalletReadyState.NotDetected
-  );
+  ) || [];
 
   const handleConnect = async (walletName: string) => {
     try {

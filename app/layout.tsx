@@ -8,6 +8,7 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { Suspense } from "react"
 import AuthSessionProvider from "@/components/auth-session-provider"
 import { ClientWalletProvider } from "@/components/client-wallet-provider"
+import { Toaster } from "@/components/ui/sonner"
 
 export const metadata: Metadata = {
   title: "v0 App",
@@ -29,6 +30,7 @@ export default function RootLayout({
               <Suspense fallback={null}>
                 {children}
                 <Analytics />
+                <Toaster />
               </Suspense>
             </ClientWalletProvider>
           </AuthSessionProvider>
