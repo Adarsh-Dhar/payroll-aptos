@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { PrismaClient } from '@prisma/client';
+import { authenticateAdmin } from '../../middleware/auth';
 
 // Declare global type for Prisma client
 declare global {
@@ -139,9 +140,33 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    // TODO: Implement admin authentication middleware
+    // Authenticate admin user
+    const authResult = await authenticateAdmin(request);
+    
+    if (!authResult.success) {
+      return NextResponse.json(
+        { success: false, message: authResult.error },
+        { status: authResult.status || 401 }
+      );
+    }
+
+    const { admin } = authResult;
+    if (!admin) {
+      return NextResponse.json(
+        { success: false, message: 'Admin data not found after authentication' },
+        { status: 500 }
+      );
+    }
+    
     const body = await request.json();
-    const projectData = createProjectSchema.parse(body);
+    
+    // Remove adminId from body since we'll use the authenticated user's ID
+    const { adminId, ...projectDataWithoutAdminId } = body;
+    
+    const projectData = createProjectSchema.parse({
+      ...projectDataWithoutAdminId,
+      adminId: admin.id // Use authenticated admin's ID
+    });
 
     // Validate bounty range
     if (projectData.lowestBounty >= projectData.highestBounty) {
@@ -151,12 +176,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify admin exists
-    const admin = await prisma.admin.findUnique({
+    // Verify admin exists (should always exist after authentication)
+    const adminCheck = await prisma.admin.findUnique({
       where: { id: projectData.adminId }
     });
 
-    if (!admin) {
+    if (!adminCheck) {
       return NextResponse.json(
         { success: false, message: 'Admin not found' },
         { status: 404 }

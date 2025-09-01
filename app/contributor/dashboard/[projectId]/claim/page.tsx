@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { DollarSign, ArrowLeft, CheckCircle, AlertCircle, Loader2, Wallet } from "lucide-react"
+import { DollarSign, ArrowLeft, CheckCircle, AlertCircle, Loader2, Wallet, XCircle } from "lucide-react"
 import Link from "next/link"
 import { useState, useEffect } from "react"
 import { useParams } from "next/navigation"
@@ -38,8 +38,6 @@ interface Project {
     Payout: number
   }
 }
-
-
 
 interface ClaimFormData {
   projectId: string
@@ -74,6 +72,15 @@ interface PRValidation {
   }
 }
 
+// Interface for checking if PR is already claimed
+interface PRClaimStatus {
+  isClaimed: boolean
+  claimedBy?: string
+  claimedAt?: string
+  claimedAmount?: number
+  message?: string
+}
+
 export default function ClaimPage() {
   const params = useParams()
   const projectId = params.projectId as string
@@ -102,6 +109,9 @@ export default function ClaimPage() {
   const [withdrawalError, setWithdrawalError] = useState<string | null>(null)
   const [withdrawalSuccess, setWithdrawalSuccess] = useState(false)
   const [transactionHash, setTransactionHash] = useState<string | null>(null)
+  const [prClaimStatus, setPrClaimStatus] = useState<PRClaimStatus | null>(null)
+  const [checkingClaimStatus, setCheckingClaimStatus] = useState(false)
+  const [submittedPRs, setSubmittedPRs] = useState<Set<string>>(new Set())
 
   // Fetch project details when component mounts
   useEffect(() => {
@@ -166,6 +176,82 @@ export default function ClaimPage() {
     fetchProjectDetails()
   }, [projectId])
 
+  // Function to extract PR number and repository from PR URL
+  const extractPRInfo = (prUrl: string) => {
+    const match = prUrl.match(/^https:\/\/github\.com\/([^\/]+\/[^\/]+)\/pull\/(\d+)$/)
+    if (match) {
+      return {
+        repository: match[1],
+        prNumber: parseInt(match[2])
+      }
+    }
+    return null
+  }
+
+  // Function to check if PR is already claimed
+  const checkPRClaimStatus = async (prUrl: string) => {
+    setCheckingClaimStatus(true)
+    setPrClaimStatus(null)
+
+    try {
+      const baseUrl = process.env.NODE_ENV === 'development' 
+        ? 'http://localhost:3000' 
+        : process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+
+      // Use the new PR claim status API to check if PR is already claimed
+      const response = await fetch(`${baseUrl}/api/v1/contributor/pr-claim-status`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'check',
+          prUrl: prUrl,
+          projectId: projectId
+        })
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        if (result.success) {
+          if (result.isClaimed) {
+            setPrClaimStatus({
+              isClaimed: true,
+              claimedBy: result.data.claimedBy || 'Unknown',
+              claimedAt: result.data.claimedAt,
+              claimedAmount: result.data.claimedAmount,
+              message: `This PR has already been claimed for $${result.data.claimedAmount}`
+            })
+          } else {
+            setPrClaimStatus({
+              isClaimed: false,
+              message: result.message || 'PR is available for claiming'
+            })
+          }
+        } else {
+          setPrClaimStatus({
+            isClaimed: false,
+            message: result.message || 'Unable to check PR status'
+          })
+        }
+      } else {
+        const errorData = await response.json().catch(() => ({}))
+        setPrClaimStatus({
+          isClaimed: false,
+          message: errorData.message || 'Unable to check PR status'
+        })
+      }
+    } catch (error) {
+      console.error('Error checking PR claim status:', error)
+      setPrClaimStatus({
+        isClaimed: false,
+        message: 'Error checking PR status'
+      })
+    } finally {
+      setCheckingClaimStatus(false)
+    }
+  }
+
   const validatePR = async () => {
     if (!formData.prUrl || !githubToken || !project?.repoUrl) {
       setValidationError('Please provide PR URL, GitHub token, and ensure project has repository URL');
@@ -183,6 +269,15 @@ export default function ClaimPage() {
     const projectRepoPattern = /^https:\/\/github\.com\/[^\/]+\/[^\/]+$/;
     if (!projectRepoPattern.test(project.repoUrl)) {
       setValidationError('Invalid project repository URL format');
+      return;
+    }
+
+    // Check if PR is already claimed before proceeding with validation
+    await checkPRClaimStatus(formData.prUrl)
+
+    // If PR is already claimed, don't proceed with validation
+    if (prClaimStatus?.isClaimed) {
+      setValidationError('This PR has already been claimed and cannot be claimed again');
       return;
     }
 
@@ -298,6 +393,61 @@ export default function ClaimPage() {
       return;
     }
 
+    // Double-check that PR is not already claimed
+    if (prClaimStatus?.isClaimed) {
+      setWithdrawalError('This PR has already been claimed and cannot be claimed again');
+      return;
+    }
+
+    // Check if this PR has already been submitted in this session
+    if (submittedPRs.has(formData.prUrl)) {
+      setWithdrawalError('This PR has already been submitted for claiming in this session. Please refresh the page to submit another claim.');
+      return;
+    }
+
+    // Check if this PR has already been claimed by this user in this session
+    if (prClaimStatus?.isClaimed) {
+      setWithdrawalError('This PR has already been claimed and cannot be claimed again');
+      return;
+    }
+
+    // Final check: query the database one more time to ensure PR hasn't been claimed since validation
+    try {
+      const baseUrl = process.env.NODE_ENV === 'development' 
+        ? 'http://localhost:3000' 
+        : process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+
+      const finalCheckResponse = await fetch(`${baseUrl}/api/v1/contributor/pr-claim-status`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          action: 'check',
+          prUrl: formData.prUrl,
+          projectId: projectId
+        })
+      });
+
+      if (finalCheckResponse.ok) {
+        const finalCheckResult = await finalCheckResponse.json();
+        if (finalCheckResult.success && finalCheckResult.isClaimed) {
+          setWithdrawalError('This PR has already been claimed since validation. Please refresh and try again.');
+          // Update the local state to reflect the claimed status
+          setPrClaimStatus({
+            isClaimed: true,
+            claimedBy: finalCheckResult.data.claimedBy || 'Unknown',
+            claimedAt: finalCheckResult.data.claimedAt,
+            claimedAmount: finalCheckResult.data.claimedAmount,
+            message: `This PR has already been claimed for $${finalCheckResult.data.claimedAmount}`
+          });
+          return;
+        }
+      }
+    } catch (error) {
+      console.warn('Final PR claim check failed, proceeding with caution:', error);
+    }
+
     setIsSubmitting(true)
     setWithdrawalError(null)
     
@@ -325,6 +475,44 @@ export default function ClaimPage() {
         console.log('Bounty withdrawal successful:', result.transactionHash);
         setTransactionHash(result.transactionHash || null);
         setWithdrawalSuccess(true);
+        
+        // After successful blockchain transaction, mark the PR as claimed in the database
+        try {
+          const baseUrl = process.env.NODE_ENV === 'development' 
+            ? 'http://localhost:3000' 
+            : process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+
+          const markClaimedResponse = await fetch(`${baseUrl}/api/v1/contributor/pr-claim-status`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              action: 'mark-claimed',
+              prUrl: formData.prUrl,
+              bountyAmount: calculatedBounty,
+              projectId: projectId
+            })
+          });
+
+          if (markClaimedResponse.ok) {
+            console.log('PR marked as claimed successfully in database');
+          } else {
+            const errorData = await markClaimedResponse.json().catch(() => ({}))
+            if (markClaimedResponse.status === 409) {
+              console.warn('PR already claimed in database - this is expected for duplicate submissions');
+            } else {
+              console.warn('Failed to mark PR as claimed in database, but blockchain transaction was successful');
+            }
+          }
+        } catch (error) {
+          console.error('Error marking PR as claimed:', error);
+          // Don't fail the entire process if marking as claimed fails
+          // The blockchain transaction was successful
+        }
+        
+        // Add this PR to the submitted set to prevent duplicate submissions
+        setSubmittedPRs(prev => new Set(prev).add(formData.prUrl));
         setSubmitted(true);
       } else {
         console.error('Bounty withdrawal failed:', result.error);
@@ -346,6 +534,12 @@ export default function ClaimPage() {
     if (field === 'prUrl') {
       setPrValidation(null);
       setValidationError(null);
+      setPrClaimStatus(null);
+      setCalculatedBounty(null);
+      setSubmitted(false);
+      setTransactionHash(null);
+      setWithdrawalSuccess(false);
+      setSubmittedPRs(new Set());
     }
   }
 
@@ -438,6 +632,12 @@ export default function ClaimPage() {
                     setSubmitted(false);
                     setTransactionHash(null);
                     setWithdrawalSuccess(false);
+                    setPrClaimStatus(null);
+                    setPrValidation(null);
+                    setCalculatedBounty(null);
+                    setValidationError(null);
+                    setWithdrawalError(null);
+                    setSubmittedPRs(new Set());
                   }}>
                     Submit Another Claim
                   </Button>
@@ -537,7 +737,7 @@ export default function ClaimPage() {
                       <Button 
                         type="button"
                         onClick={validatePR}
-                        disabled={!formData.prUrl || !githubToken || validatingPr}
+                        disabled={!formData.prUrl || !githubToken || validatingPr || checkingClaimStatus}
                         variant="outline"
                         className="whitespace-nowrap"
                       >
@@ -561,6 +761,44 @@ export default function ClaimPage() {
                       <div className="flex items-center gap-2 text-sm text-blue-600">
                         <Loader2 className="h-4 w-4 animate-spin" />
                         <span>Validating PR and calculating score...</span>
+                      </div>
+                    )}
+                    {checkingClaimStatus && (
+                      <div className="flex items-center gap-2 text-sm text-yellow-600">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span>Checking PR claim status...</span>
+                      </div>
+                    )}
+                    {prClaimStatus && (
+                      <div className={`p-3 border rounded-md ${
+                        prClaimStatus.isClaimed 
+                          ? 'bg-red-50 border-red-200' 
+                          : 'bg-green-50 border-green-200'
+                      }`}>
+                        <div className="flex items-center gap-2">
+                          {prClaimStatus.isClaimed ? (
+                            <XCircle className="h-4 w-4 text-red-600" />
+                          ) : (
+                            <CheckCircle className="h-4 w-4 text-green-600" />
+                          )}
+                          <div>
+                            <span className={`text-sm font-medium ${
+                              prClaimStatus.isClaimed ? 'text-red-700' : 'text-green-700'
+                            }`}>
+                              {prClaimStatus.message}
+                            </span>
+                            {prClaimStatus.isClaimed && prClaimStatus.claimedAmount && (
+                              <div className="text-xs text-red-600 mt-1">
+                                Claimed Amount: ${prClaimStatus.claimedAmount.toLocaleString()}
+                                {prClaimStatus.claimedAt && (
+                                  <span className="ml-2">
+                                    on {new Date(prClaimStatus.claimedAt).toLocaleDateString()}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -775,7 +1013,7 @@ export default function ClaimPage() {
                   <Button 
                     type="submit" 
                     className="w-full bg-green-600 hover:bg-green-700 text-white"
-                    disabled={isSubmitting || !prValidation || !connected}
+                    disabled={isSubmitting || !prValidation || !connected || prClaimStatus?.isClaimed || submitted}
                   >
                     {isSubmitting ? (
                       <>
@@ -787,10 +1025,10 @@ export default function ClaimPage() {
                         <Wallet className="h-4 w-4 mr-2" />
                         Connect Wallet to Claim
                       </>
-                    ) : !prValidation ? (
+                    ) : prClaimStatus?.isClaimed ? (
                       <>
-                        <AlertCircle className="h-4 w-4 mr-2" />
-                        Validate PR First
+                        <XCircle className="h-4 w-4 mr-2" />
+                        PR Already Claimed
                       </>
                     ) : (
                       <>

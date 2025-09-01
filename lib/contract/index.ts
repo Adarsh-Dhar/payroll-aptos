@@ -18,7 +18,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 // Contract configuration
-const CONTRACT_ADDRESS = "0xf7cf47bc932807a9242c50f29d2ef998323ca17d8f56b03dfa70b852c438a1c6"; // Deployed contract address on testnet
+const CONTRACT_ADDRESS = "0x4c21a4998d0673a4b9400bf5610a7189c36409f469d56b54fae2a81616ac0421"; // Deployed contract address on testnet
 const CONTRACT_MODULE = "project_escrow_v3";
 
 // Explicitly set to TESTNET to match where the contract is deployed

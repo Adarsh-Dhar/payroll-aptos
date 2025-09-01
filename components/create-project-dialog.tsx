@@ -24,7 +24,6 @@ type CreateProjectFormState = {
 	budget: string
 	lowestBounty: string
 	highestBounty: string
-	adminId: string
 	fundingAmount: string
 }
 
@@ -38,7 +37,6 @@ export function CreateProjectDialog() {
 		budget: "",
 		lowestBounty: "",
 		highestBounty: "",
-		adminId: "",
 		fundingAmount: "",
 	})
 
@@ -80,7 +78,6 @@ export function CreateProjectDialog() {
 				budget: Number(form.budget),
 				lowestBounty: Number(form.lowestBounty),
 				highestBounty: Number(form.highestBounty),
-				adminId: Number(form.adminId),
 			}
 
 			toast.info("Creating project in database...")
@@ -103,7 +100,6 @@ export function CreateProjectDialog() {
 					budget: "", 
 					lowestBounty: "", 
 					highestBounty: "", 
-					adminId: "", 
 					fundingAmount: "" 
 				})
 			} else {
@@ -253,18 +249,6 @@ export function CreateProjectDialog() {
 								required
 							/>
 						</div>
-					</div>
-					<div className="grid gap-2">
-						<Label htmlFor="adminId">Admin ID</Label>
-						<Input
-							id="adminId"
-							type="number"
-							min="1"
-							placeholder="1"
-							value={form.adminId}
-							onChange={(e) => setForm((s) => ({ ...s, adminId: e.target.value }))}
-							required
-						/>
 					</div>
 
 					<DialogFooter>

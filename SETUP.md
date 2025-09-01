@@ -16,6 +16,14 @@ DATABASE_URL="postgresql://postgres:example@localhost:5435/devpaystream"
 JWT_SECRET="your-super-secret-jwt-key-change-this-in-production"
 JWT_EXPIRES_IN="24h"
 
+# NextAuth Configuration
+NEXTAUTH_SECRET="your-nextauth-secret-key-change-this-in-production"
+NEXTAUTH_URL="http://localhost:3000"
+
+# GitHub OAuth (Required for admin authentication)
+GITHUB_ID="your-github-oauth-app-client-id"
+GITHUB_SECRET="your-github-oauth-app-client-secret"
+
 # GitHub Webhook
 GITHUB_WEBHOOK_SECRET="your-github-webhook-secret"
 
@@ -24,7 +32,19 @@ API_RATE_LIMIT=100
 API_RATE_LIMIT_WINDOW=60000
 ```
 
-### 2. Start PostgreSQL Database
+### 2. GitHub OAuth Setup
+
+To enable GitHub OAuth authentication:
+
+1. Go to [GitHub Developer Settings](https://github.com/settings/developers)
+2. Click "New OAuth App"
+3. Fill in the details:
+   - **Application name**: DevPayStream Admin
+   - **Homepage URL**: `http://localhost:3000`
+   - **Authorization callback URL**: `http://localhost:3000/api/auth/callback/github`
+4. Copy the Client ID and Client Secret to your `.env.local` file
+
+### 3. Start PostgreSQL Database
 
 ```bash
 # Start the database container
@@ -34,7 +54,7 @@ docker-compose up -d
 docker-compose ps
 ```
 
-### 3. Database Setup
+### 4. Database Setup
 
 ```bash
 # Generate Prisma client
@@ -47,7 +67,7 @@ pnpm db:push
 pnpm db:seed
 ```
 
-### 4. Start Development Server
+### 5. Start Development Server
 
 ```bash
 pnpm dev
@@ -67,7 +87,18 @@ The API uses the following Prisma schema:
 
 ## 🔐 Authentication
 
-### Admin Login
+### GitHub OAuth Authentication
+
+The admin dashboard now uses GitHub OAuth for authentication. When you visit `/admin/dashboard`:
+
+1. If not signed in, you'll be redirected to GitHub OAuth
+2. After successful authentication, you'll be automatically mapped to an Admin record
+3. You can then access the admin dashboard and create projects
+
+### Legacy Admin Login (Optional)
+
+For backward compatibility, the old admin login endpoint is still available:
+
 ```bash
 curl -X POST "http://localhost:3000/api/v1/auth/admin/login" \
   -H "Content-Type: application/json" \
@@ -81,11 +112,9 @@ curl -X POST "http://localhost:3000/api/v1/auth/admin/login" \
 - Email: `admin@devpaystream.com`
 - Password: `admin123`
 
-### Using the Token
-```bash
-curl -X GET "http://localhost:3000/api/v1/projects" \
-  -H "Authorization: Bearer mock-jwt-123456789"
-```
+### API Authentication
+
+The API now automatically authenticates users via NextAuth session cookies. No manual token handling is required.
 
 ## 🧪 Testing the API
 
