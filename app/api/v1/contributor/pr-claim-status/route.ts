@@ -40,9 +40,12 @@ export async function POST(request: NextRequest) {
       action,
       prUrl,
       projectId,
-      bountyAmount
+      bountyAmount,
+      projectIdType: typeof projectId,
+      projectIdIsNaN: isNaN(Number(projectId))
     });
 
+    // Validate required fields
     if (!action || !prUrl) {
       console.error('Missing required fields:', { action, prUrl });
       return NextResponse.json(
@@ -51,26 +54,56 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Extract PR number and repository from PR URL
-    const prUrlMatch = prUrl.match(/github\.com\/([^\/]+)\/([^\/]+\/pull\/(\d+))/);
-    if (!prUrlMatch) {
+    // Validate action value
+    if (!['check', 'mark-claimed'].includes(action)) {
+      console.error('Invalid action:', action);
       return NextResponse.json(
-        { success: false, message: 'Invalid PR URL format' },
+        { success: false, message: 'Invalid action. Use "check" or "mark-claimed"' },
         { status: 400 }
       );
     }
 
-    const [, repository, prNumberStr] = prUrlMatch;
+    // Validate projectId for mark-claimed action
+    if (action === 'mark-claimed') {
+      if (!projectId) {
+        console.error('Missing projectId for mark-claimed action');
+        return NextResponse.json(
+          { success: false, message: 'Missing projectId for mark-claimed action' },
+          { status: 400 }
+        );
+      }
+      
+      if (isNaN(Number(projectId))) {
+        console.error('Invalid projectId for mark-claimed action:', projectId);
+        return NextResponse.json(
+          { success: false, message: `Invalid projectId for mark-claimed action: ${projectId}` },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Extract PR number and repository from PR URL
+    const prUrlMatch = prUrl.match(/github\.com\/([^\/]+)\/([^\/]+)\/pull\/(\d+)/);
+    if (!prUrlMatch) {
+      console.error('Invalid PR URL format:', prUrl);
+      return NextResponse.json(
+        { success: false, message: 'Invalid PR URL format. Expected: https://github.com/owner/repo/pull/number' },
+        { status: 400 }
+      );
+    }
+
+    const [, owner, repository, prNumberStr] = prUrlMatch;
     const prNumber = parseInt(prNumberStr);
     
     if (isNaN(prNumber)) {
+      console.error('Invalid PR number in URL:', prNumberStr);
       return NextResponse.json(
         { success: false, message: 'Invalid PR number in URL' },
         { status: 400 }
       );
     }
 
-    console.log('Extracted PR info:', { repository, prNumber });
+    console.log('Extracted PR info:', { owner, repository, prNumber });
 
     // Get developer ID from session
     const sessionUser = session.user as any;
@@ -125,7 +158,7 @@ export async function POST(request: NextRequest) {
               { 
                 AND: [
                   { prNumber: prNumber },
-                  { Project: { repoUrl: { contains: repository } } }
+                  { Project: { repoUrl: { contains: `${owner}/${repository}` } } }
                 ]
               }
             ]
@@ -142,21 +175,37 @@ export async function POST(request: NextRequest) {
         });
 
         if (existingPR) {
-          if (existingPR.bountyClaimed) {
-            console.log('⚠️ PR already claimed');
-            return NextResponse.json({
-              success: true,
-              isClaimed: true,
-              message: 'This PR has already been claimed',
-              data: {
-                prId: existingPR.id,
-                claimedBy: existingPR.bountyClaimedBy,
-                claimedAt: existingPR.bountyClaimedAt,
-                claimedAmount: existingPR.bountyClaimedAmount || existingPR.amountPaid,
-                projectId: existingPR.projectId
-              }
-            });
-          } else {
+                          if (existingPR.bountyClaimed) {
+          console.log('⚠️ PR already claimed');
+          
+          // Try to get claimedBy and claimedAmount if available
+          let claimedBy = 'Unknown';
+          let claimedAmount = existingPR.amountPaid;
+          
+          try {
+            if ((existingPR as any)?.bountyClaimedBy) {
+              claimedBy = `Developer ${(existingPR as any).bountyClaimedBy}`;
+            }
+            if ((existingPR as any)?.bountyClaimedAmount) {
+              claimedAmount = (existingPR as any).bountyClaimedAmount;
+            }
+          } catch (e) {
+            console.log('Some bounty fields not available in current schema');
+          }
+          
+          return NextResponse.json({
+            success: true,
+            isClaimed: true,
+            message: 'This PR has already been claimed',
+            data: {
+              prId: existingPR.id,
+              claimedBy: claimedBy,
+              claimedAt: existingPR.bountyClaimedAt,
+              claimedAmount: claimedAmount,
+              projectId: existingPR.projectId
+            }
+          });
+        } else {
             console.log('✅ PR found but not claimed');
             return NextResponse.json({
               success: true,
@@ -187,9 +236,19 @@ export async function POST(request: NextRequest) {
         );
       }
     } else if (action === 'mark-claimed') {
-      if (!bountyAmount || !projectId) {
+      if (!bountyAmount || isNaN(Number(bountyAmount))) {
+        console.error('Invalid bountyAmount:', bountyAmount);
         return NextResponse.json(
-          { success: false, message: 'Missing required fields for marking as claimed: bountyAmount and projectId' },
+          { success: false, message: 'Invalid bountyAmount. Must be a valid number' },
+          { status: 400 }
+        );
+      }
+
+      const parsedProjectId = parseInt(projectId);
+      if (isNaN(parsedProjectId)) {
+        console.error('Invalid projectId:', projectId);
+        return NextResponse.json(
+          { success: false, message: 'Invalid projectId. Must be a valid number' },
           { status: 400 }
         );
       }
@@ -203,7 +262,7 @@ export async function POST(request: NextRequest) {
               { 
                 AND: [
                   { prNumber: prNumber },
-                  { Project: { repoUrl: { contains: repository } } }
+                  { Project: { repoUrl: { contains: `${owner}/${repository}` } } }
                 ]
               }
             ]
@@ -223,53 +282,83 @@ export async function POST(request: NextRequest) {
         if (existingPR) {
           // Update existing PR
           console.log('✅ Updating existing PR as claimed');
+          
+          // Build the update data object with only available fields
+          const updateData: any = {
+            bountyClaimed: true,
+            bountyClaimedAt: new Date(),
+            amountPaid: Number(bountyAmount),
+            updatedAt: new Date(),
+          };
+
+          // Try to add fields that might exist in newer schema versions
+          try {
+            // Check if these fields exist by trying to access them
+            if (typeof (existingPR as any)?.bountyClaimedBy !== 'undefined') {
+              updateData.bountyClaimedBy = developerId;
+            }
+            if (typeof (existingPR as any)?.bountyClaimedAmount !== 'undefined') {
+              updateData.bountyClaimedAmount = Number(bountyAmount);
+            }
+          } catch (e) {
+            console.log('Some bounty fields not available in current schema, proceeding without them');
+          }
+
           prToUpdate = await prisma.pullRequest.update({
             where: { id: existingPR.id },
-            data: {
-              bountyClaimed: true,
-              bountyClaimedAt: new Date(),
-              bountyClaimedBy: developerId,
-              bountyClaimedAmount: bountyAmount,
-              amountPaid: bountyAmount,
-              updatedAt: new Date(),
-            } as any
+            data: updateData
           });
         } else {
           // Create new PR record
           console.log('✅ Creating new PR record as claimed');
+          
+          // Build the data object with only available fields
+          const prData: any = {
+            prNumber: prNumber,
+            title: `PR #${prNumber} from ${owner}/${repository}`,
+            description: `Auto-created PR record for ${owner}/${repository}#${prNumber}`,
+            additions: 0,
+            deletions: 0,
+            hasTests: false,
+            linkedIssue: prUrl,
+            merged: true,
+            score: 8.0,
+            amountPaid: Number(bountyAmount),
+            developerId: developerId,
+            projectId: parsedProjectId,
+            bountyAmount: Number(bountyAmount),
+            bountyClaimed: true,
+            bountyClaimedAt: new Date(),
+            updatedAt: new Date(),
+          };
+
+          // Try to add fields that might exist in newer schema versions
+          try {
+            // Check if these fields exist by trying to access them
+            if (typeof (existingPR as any)?.bountyClaimedBy !== 'undefined') {
+              prData.bountyClaimedBy = developerId;
+            }
+            if (typeof (existingPR as any)?.bountyClaimedAmount !== 'undefined') {
+              prData.bountyClaimedAmount = Number(bountyAmount);
+            }
+          } catch (e) {
+            console.log('Some bounty fields not available in current schema, proceeding without them');
+          }
+
           prToUpdate = await prisma.pullRequest.create({
-            data: {
-              prNumber: prNumber,
-              title: `PR #${prNumber} from ${repository}`,
-              description: `Auto-created PR record for ${repository}#${prNumber}`,
-              additions: 0,
-              deletions: 0,
-              hasTests: false,
-              linkedIssue: prUrl,
-              merged: true,
-              score: 8.0,
-              amountPaid: bountyAmount,
-              developerId: developerId,
-              projectId: parseInt(projectId),
-              bountyAmount: bountyAmount,
-              bountyClaimed: true,
-              bountyClaimedAt: new Date(),
-              bountyClaimedBy: developerId,
-              bountyClaimedAmount: bountyAmount,
-              updatedAt: new Date(),
-            } as any
+            data: prData
           });
         }
 
         // Create payout record
         const payout = await prisma.payout.create({
           data: {
-            id: `bounty-${projectId}-${prNumber}-${Date.now()}`,
-            amount: bountyAmount,
+            id: `bounty-${parsedProjectId}-${prNumber}-${Date.now()}`,
+            amount: Number(bountyAmount),
             developerId: developerId,
-            projectId: parseInt(projectId),
+            projectId: parsedProjectId,
             status: 'completed',
-            transactionId: `bounty-${projectId}-${prNumber}-${Date.now()}`,
+            transactionId: `bounty-${parsedProjectId}-${prNumber}-${Date.now()}`,
             updatedAt: new Date(),
           } as any
         });
@@ -294,11 +383,6 @@ export async function POST(request: NextRequest) {
           { status: 500 }
         );
       }
-    } else {
-      return NextResponse.json(
-        { success: false, message: 'Invalid action. Use "check" or "mark-claimed"' },
-        { status: 400 }
-      );
     }
 
   } catch (error) {
