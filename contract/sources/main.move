@@ -1,4 +1,4 @@
-module fund_withdraw::project_escrow {
+module fund_withdraw_v2::project_escrow_v2 {
     use std::signer;
     use std::error;
     use std::table::{Self, Table};
@@ -12,6 +12,7 @@ module fund_withdraw::project_escrow {
     const E_ESCROW_NOT_INITIALIZED: u64 = 4;
     const E_PROJECT_ALREADY_EXISTS: u64 = 5;
     const E_AUTO_ID_NOT_INITIALIZED: u64 = 6;
+    const E_RECIPIENT_NOT_REGISTERED: u64 = 7;
 
     // Struct to store project escrow information
     struct ProjectEscrow has store {
@@ -30,6 +31,7 @@ module fund_withdraw::project_escrow {
     struct EscrowVault has key {
         projects: Table<u64, ProjectEscrow>,
         total_balance: u64, // Track total funds in the contract
+        treasury: coin::Coin<AptosCoin>,
     }
 
     // Separate resource for auto-incrementing project IDs
@@ -39,20 +41,27 @@ module fund_withdraw::project_escrow {
 
     // Initialize the escrow vault (called once by the contract deployer)
     public entry fun initialize(account: &signer) {
-        let vault = EscrowVault {
-            projects: table::new(),
-            total_balance: 0,
+        let contract_address = @fund_withdraw_v2;
+        if (!exists<EscrowVault>(contract_address)) {
+            let vault = EscrowVault {
+                projects: table::new(),
+                total_balance: 0,
+                treasury: coin::zero<AptosCoin>(),
+            };
+            move_to(account, vault);
         };
-        move_to(account, vault);
         
-        // Initialize the auto-ID generator
-        let id_generator = AutoProjectIdGenerator {
-            next_project_id: 0,
+        if (!exists<AutoProjectIdGenerator>(contract_address)) {
+            let id_generator = AutoProjectIdGenerator {
+                next_project_id: 0,
+            };
+            move_to(account, id_generator);
         };
-        move_to(account, id_generator);
         
-        // Register the contract to hold AptosCoin
-        coin::register<AptosCoin>(account);
+        if (!coin::is_account_registered<AptosCoin>(contract_address)) {
+            // Register the contract to hold AptosCoin
+            coin::register<AptosCoin>(account);
+        };
     }
 
     // Create a new project escrow with auto-generated ID (new function)
@@ -60,7 +69,7 @@ module fund_withdraw::project_escrow {
         account: &signer,
         initial_amount: u64
     ) acquires EscrowVault, AutoProjectIdGenerator {
-        let contract_address = @fund_withdraw;
+        let contract_address = @fund_withdraw_v2;
         
         // Ensure escrow vault is initialized
         assert!(exists<EscrowVault>(contract_address), error::not_found(E_ESCROW_NOT_INITIALIZED));
@@ -73,8 +82,9 @@ module fund_withdraw::project_escrow {
         // Get the next available project ID
         let project_id = id_generator.next_project_id;
         
-        // Transfer coins from user to contract
-        coin::transfer<AptosCoin>(account, contract_address, initial_amount);
+        // Withdraw coins from user and store in treasury
+        let coins = coin::withdraw<AptosCoin>(account, initial_amount);
+        coin::merge(&mut vault.treasury, coins);
         
         // Create new project escrow with default name
         let project_escrow = ProjectEscrow {
@@ -107,7 +117,7 @@ module fund_withdraw::project_escrow {
         initial_amount: u64,
         project_name: vector<u8>
     ) acquires EscrowVault {
-        let contract_address = @fund_withdraw;
+        let contract_address = @fund_withdraw_v2;
         
         // Ensure escrow vault is initialized
         assert!(exists<EscrowVault>(contract_address), error::not_found(E_ESCROW_NOT_INITIALIZED));
@@ -118,8 +128,9 @@ module fund_withdraw::project_escrow {
         // Check if project ID already exists
         assert!(!table::contains(&vault.projects, project_id), error::already_exists(E_PROJECT_ALREADY_EXISTS));
         
-        // Transfer coins from user to contract
-        coin::transfer<AptosCoin>(account, contract_address, initial_amount);
+        // Withdraw coins from user and store in treasury
+        let coins = coin::withdraw<AptosCoin>(account, initial_amount);
+        coin::merge(&mut vault.treasury, coins);
         
         // Create new project escrow
         let project_escrow = ProjectEscrow {
@@ -148,7 +159,7 @@ module fund_withdraw::project_escrow {
         project_id: u64,
         amount: u64
     ) acquires EscrowVault {
-        let contract_address = @fund_withdraw;
+        let contract_address = @fund_withdraw_v2;
         
         // Ensure escrow vault is initialized
         assert!(exists<EscrowVault>(contract_address), error::not_found(E_ESCROW_NOT_INITIALIZED));
@@ -165,8 +176,9 @@ module fund_withdraw::project_escrow {
         // Check if the caller is the owner
         assert!(project_escrow.owner == signer::address_of(account), error::permission_denied(E_UNAUTHORIZED));
         
-        // Transfer coins from user to contract
-        coin::transfer<AptosCoin>(account, contract_address, amount);
+        // Withdraw coins from user and store in treasury
+        let coins = coin::withdraw<AptosCoin>(account, amount);
+        coin::merge(&mut vault.treasury, coins);
         
         // Update project balance
         project_escrow.balance = project_escrow.balance + amount;
@@ -175,48 +187,38 @@ module fund_withdraw::project_escrow {
         vault.total_balance = vault.total_balance + amount;
     }
 
-    // Withdraw function: withdraws specified amount from project with given ID
-    public entry fun withdraw_from_project(
-        account: &signer,
-        project_id: u64,
-        amount: u64
-    ) acquires EscrowVault {
-        let contract_address = @fund_withdraw;
-        
-        // Ensure escrow vault is initialized
-        assert!(exists<EscrowVault>(contract_address), error::not_found(E_ESCROW_NOT_INITIALIZED));
-        
-        // Get mutable reference to vault
-        let vault = borrow_global_mut<EscrowVault>(contract_address);
-        
-        // Check if project exists
-        assert!(table::contains(&vault.projects, project_id), error::not_found(E_PROJECT_NOT_FOUND));
-        
-        // Get mutable reference to the project escrow
-        let project_escrow = table::borrow_mut(&mut vault.projects, project_id);
-        
-        // Check if the caller is the owner
-        assert!(project_escrow.owner == signer::address_of(account), error::permission_denied(E_UNAUTHORIZED));
-        
-        // Check if sufficient balance in project
-        assert!(project_escrow.balance >= amount, error::invalid_argument(E_INSUFFICIENT_BALANCE));
-        
-        // Update project balance
-        project_escrow.balance = project_escrow.balance - amount;
-        
-        // Update total balance
-        vault.total_balance = vault.total_balance - amount;
-        
-        // For now, we'll use a simplified approach
-        // In production, you'd want proper capability management
-        // The user would need to provide a capability or use a different pattern
-        // For now, let's just update the balances
-    }
+   public entry fun withdraw_from_project(
+    account: &signer,
+    project_id: u64,
+    amount: u64
+) acquires EscrowVault {
+    let contract_address = @fund_withdraw_v2;
+
+    assert!(exists<EscrowVault>(contract_address), error::not_found(E_ESCROW_NOT_INITIALIZED));
+    let vault = borrow_global_mut<EscrowVault>(contract_address);
+
+    assert!(table::contains(&vault.projects, project_id), error::not_found(E_PROJECT_NOT_FOUND));
+    let project_escrow = table::borrow_mut(&mut vault.projects, project_id);
+
+    assert!(project_escrow.owner == signer::address_of(account), error::permission_denied(E_UNAUTHORIZED));
+    assert!(project_escrow.balance >= amount, error::invalid_argument(E_INSUFFICIENT_BALANCE));
+
+    // Update internal accounting first
+    project_escrow.balance = project_escrow.balance - amount;
+    vault.total_balance = vault.total_balance - amount;
+
+    // Move actual coins from the contract CoinStore to the caller
+    let recipient = signer::address_of(account);
+    assert!(coin::is_account_registered<AptosCoin>(recipient), error::invalid_argument(E_RECIPIENT_NOT_REGISTERED));
+
+    let coins = coin::extract<AptosCoin>(&mut vault.treasury, amount);
+    coin::deposit(recipient, coins);
+}
 
     // View function: get project balance by ID
     #[view]
     public fun get_project_balance(project_id: u64): u64 acquires EscrowVault {
-        let contract_address = @fund_withdraw;
+        let contract_address = @fund_withdraw_v2;
         assert!(exists<EscrowVault>(contract_address), error::not_found(E_ESCROW_NOT_INITIALIZED));
         
         let vault = borrow_global<EscrowVault>(contract_address);
@@ -314,17 +316,17 @@ module fund_withdraw::project_escrow {
         
         // Check project details
         assert!(get_project_balance(0) == 100, 1);
-        assert!(get_project_owner(@fund_withdraw, 0) == signer::address_of(&user1), 2);
-        assert!(project_exists(@fund_withdraw, 0) == true, 3);
-        assert!(get_total_balance(@fund_withdraw) == 100, 4);
-        assert!(get_next_project_id(@fund_withdraw) == 1, 5);
+        assert!(get_project_owner(@fund_withdraw_v2, 0) == signer::address_of(&user1), 2);
+        assert!(project_exists(@fund_withdraw_v2, 0) == true, 3);
+        assert!(get_total_balance(@fund_withdraw_v2) == 100, 4);
+        assert!(get_next_project_id(@fund_withdraw_v2) == 1, 5);
         
         // Test backward compatibility function
         create_project_escrow(&user1, 101, 50, b"Test Project");
         
         // Check second project details
         assert!(get_project_balance(101) == 50, 6);
-        assert!(get_total_balance(@fund_withdraw) == 150, 7);
+        assert!(get_total_balance(@fund_withdraw_v2) == 150, 7);
         
         // Fund the first project with more money
         let coins2 = coin::mint<AptosCoin>(25, &mint_cap);
@@ -333,14 +335,14 @@ module fund_withdraw::project_escrow {
         
         // Check updated balance
         assert!(get_project_balance(0) == 125, 8);
-        assert!(get_total_balance(@fund_withdraw) == 175, 9);
+        assert!(get_total_balance(@fund_withdraw_v2) == 175, 9);
         
         // Withdraw from first project
         withdraw_from_project(&user1, 0, 75);
         
         // Check final balance
         assert!(get_project_balance(0) == 50, 10);
-        assert!(get_total_balance(@fund_withdraw) == 125, 11);
+        assert!(get_total_balance(@fund_withdraw_v2) == 125, 11);
         
         // Clean up
         coin::destroy_burn_cap(burn_cap);

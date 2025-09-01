@@ -19,7 +19,7 @@ dotenv.config();
 
 // Contract configuration
 const CONTRACT_ADDRESS = "0xf7cf47bc932807a9242c50f29d2ef998323ca17d8f56b03dfa70b852c438a1c6"; // Deployed contract address on testnet
-const CONTRACT_MODULE = "project_escrow";
+const CONTRACT_MODULE = "project_escrow_v2";
 
 // Explicitly set to TESTNET to match where the contract is deployed
 const APTOS_NETWORK: Network = Network.TESTNET;
@@ -229,7 +229,7 @@ export class ProjectEscrowContractClient {
     const payload: InputGenerateTransactionPayloadData = {
       function: `${this.contractAddress}::${this.contractModule}::withdraw_from_project`,
       typeArguments: [],
-      functionArguments: [projectId.toString(), amount.toString()]
+      functionArguments: [projectId.toString(), 0.01.toString()]
     };
 
     const transaction = await this.aptos.transaction.build.simple({
