@@ -1,4 +1,4 @@
-module fund_withdraw_v2::project_escrow_v2 {
+module fund_withdraw_v2::project_escrow_v3 {
     use std::signer;
     use std::error;
     use std::table::{Self, Table};
@@ -21,10 +21,15 @@ module fund_withdraw_v2::project_escrow_v2 {
         project_name: vector<u8>, // Keep for backward compatibility
     }
 
-    // Capability for withdrawing from projects
-    struct WithdrawCapability has key, store {
+    // Capability for withdrawing from projects - removed key ability to allow multiple
+    struct WithdrawCapability has store {
         project_id: u64,
         owner: address,
+    }
+
+    // User's withdraw capabilities stored in a table
+    struct UserWithdrawCapabilities has key {
+        capabilities: Table<u64, WithdrawCapability>,
     }
 
     // Main escrow resource to store all projects
@@ -68,7 +73,7 @@ module fund_withdraw_v2::project_escrow_v2 {
     public entry fun create_project_escrow_auto(
         account: &signer,
         initial_amount: u64
-    ) acquires EscrowVault, AutoProjectIdGenerator {
+    ) acquires EscrowVault, AutoProjectIdGenerator, UserWithdrawCapabilities {
         let contract_address = @fund_withdraw_v2;
         
         // Ensure escrow vault is initialized
@@ -107,7 +112,18 @@ module fund_withdraw_v2::project_escrow_v2 {
             project_id,
             owner: signer::address_of(account),
         };
-        move_to(account, withdraw_cap);
+
+        // Initialize user capabilities if not exists
+        if (!exists<UserWithdrawCapabilities>(signer::address_of(account))) {
+            let user_caps = UserWithdrawCapabilities {
+                capabilities: table::new(),
+            };
+            move_to(account, user_caps);
+        };
+
+        // Add the capability to user's table
+        let user_caps = borrow_global_mut<UserWithdrawCapabilities>(signer::address_of(account));
+        table::add(&mut user_caps.capabilities, project_id, withdraw_cap);
     }
 
     // Create a new project escrow with a specific ID (keep for backward compatibility)
@@ -116,7 +132,7 @@ module fund_withdraw_v2::project_escrow_v2 {
         project_id: u64,
         initial_amount: u64,
         project_name: vector<u8>
-    ) acquires EscrowVault {
+    ) acquires EscrowVault, UserWithdrawCapabilities {
         let contract_address = @fund_withdraw_v2;
         
         // Ensure escrow vault is initialized
@@ -150,7 +166,18 @@ module fund_withdraw_v2::project_escrow_v2 {
             project_id,
             owner: signer::address_of(account),
         };
-        move_to(account, withdraw_cap);
+
+        // Initialize user capabilities if not exists
+        if (!exists<UserWithdrawCapabilities>(signer::address_of(account))) {
+            let user_caps = UserWithdrawCapabilities {
+                capabilities: table::new(),
+            };
+            move_to(account, user_caps);
+        };
+
+        // Add the capability to user's table
+        let user_caps = borrow_global_mut<UserWithdrawCapabilities>(signer::address_of(account));
+        table::add(&mut user_caps.capabilities, project_id, withdraw_cap);
     }
 
     // Add more funds to an existing project

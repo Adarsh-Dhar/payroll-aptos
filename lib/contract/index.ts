@@ -19,7 +19,7 @@ dotenv.config();
 
 // Contract configuration
 const CONTRACT_ADDRESS = "0xf7cf47bc932807a9242c50f29d2ef998323ca17d8f56b03dfa70b852c438a1c6"; // Deployed contract address on testnet
-const CONTRACT_MODULE = "project_escrow_v2";
+const CONTRACT_MODULE = "project_escrow_v3";
 
 // Explicitly set to TESTNET to match where the contract is deployed
 const APTOS_NETWORK: Network = Network.TESTNET;
