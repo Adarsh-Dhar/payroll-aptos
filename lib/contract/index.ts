@@ -699,6 +699,85 @@ export class ProjectEscrowContractClient {
   }
 
   /**
+   * Withdraw bounty from a project using wallet adapter (new method)
+   * @param accountAddress - The account address
+   * @param signAndSubmitTransaction - The wallet adapter's signAndSubmitTransaction function
+   * @param projectId - The ID of the project to withdraw from
+   * @param amountInApt - Amount in APT (will be converted to octas)
+   * @returns Transaction hash and status
+   */
+  async withdrawFromProjectWithWallet(
+    accountAddress: string,
+    signAndSubmitTransaction: (transaction: any) => Promise<any>,
+    projectId: number,
+    amountInApt: number
+  ): Promise<{ success: boolean; transactionHash?: string; error?: string }> {
+    try {
+      // Check if project exists
+      const projectExists = await this.projectExists(projectId);
+      if (!projectExists) {
+        return { 
+          success: false, 
+          error: 'Project not found' 
+        };
+      }
+
+      // Check if project has sufficient balance
+      const projectBalance = await this.getProjectBalance(projectId);
+      const amountInOctas = projectEscrowUtils.aptToOctas(amountInApt);
+      
+      if (projectBalance < amountInOctas) {
+        return {
+          success: false,
+          error: `Insufficient project balance. Available: ${projectEscrowUtils.formatApt(projectBalance)}, Requested: ${projectEscrowUtils.formatApt(amountInOctas)}`
+        };
+      }
+
+      console.log(`Withdrawing from project ${projectId}: ${amountInApt} APT = ${amountInOctas} octas`);
+      console.log(`Project balance: ${projectEscrowUtils.formatApt(projectBalance)}`);
+
+      // Create the transaction data in the format expected by wallet adapter
+      const transactionData = {
+        data: {
+          function: `${this.contractAddress}::${this.contractModule}::withdraw_from_project`,
+          typeArguments: [],
+          functionArguments: [projectId.toString(), amountInOctas.toString()]
+        },
+        options: {
+          maxGasAmount: "50000",  // Increase from 2000 to 50000
+          gasUnitPrice: "100"    // Minimum gas price for Testnet
+        }
+      };
+
+      console.log("Transaction data prepared:", transactionData);
+      console.log("Transaction data type:", typeof transactionData);
+      console.log("Transaction data keys:", Object.keys(transactionData));
+
+      // Sign and submit using wallet adapter
+      console.log("About to call signAndSubmitTransaction...");
+      const pendingTxn = await signAndSubmitTransaction(transactionData);
+      console.log("Transaction submitted:", pendingTxn);
+      
+      // Wait for transaction to complete
+      const result = await this.aptos.waitForTransaction({
+        transactionHash: pendingTxn.hash,
+      });
+      
+      return {
+        success: true,
+        transactionHash: result.hash
+      };
+
+    } catch (error) {
+      console.error('Error withdrawing from project with wallet:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error occurred'
+      };
+    }
+  }
+
+  /**
    * Get project funding status
    * @param projectId - The ID of the project to check
    * @returns Project funding status information

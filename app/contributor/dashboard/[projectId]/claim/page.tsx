@@ -6,11 +6,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { DollarSign, ArrowLeft, CheckCircle, AlertCircle, Loader2 } from "lucide-react"
+import { DollarSign, ArrowLeft, CheckCircle, AlertCircle, Loader2, Wallet } from "lucide-react"
 import Link from "next/link"
 import { useState, useEffect } from "react"
 import { useParams } from "next/navigation"
 import { Badge } from "@/components/ui/badge"
+import { useWallet } from "@aptos-labs/wallet-adapter-react"
+import { projectEscrowClient } from "@/lib/contract"
 
 // Define the project data type based on our API response
 interface Project {
@@ -76,6 +78,9 @@ export default function ClaimPage() {
   const params = useParams()
   const projectId = params.projectId as string
   
+  // Wallet integration
+  const { connected, account, signAndSubmitTransaction } = useWallet()
+  
   const [project, setProject] = useState<Project | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -94,6 +99,9 @@ export default function ClaimPage() {
   const [validatingPr, setValidatingPr] = useState(false)
   const [validationError, setValidationError] = useState<string | null>(null)
   const [calculatedBounty, setCalculatedBounty] = useState<number | null>(null)
+  const [withdrawalError, setWithdrawalError] = useState<string | null>(null)
+  const [withdrawalSuccess, setWithdrawalSuccess] = useState(false)
+  const [transactionHash, setTransactionHash] = useState<string | null>(null)
 
   // Fetch project details when component mounts
   useEffect(() => {
@@ -280,13 +288,55 @@ export default function ClaimPage() {
       return;
     }
 
+    if (!connected || !account) {
+      setWithdrawalError('Please connect your wallet to submit the bounty claim');
+      return;
+    }
+
+    if (!calculatedBounty) {
+      setWithdrawalError('Bounty amount not calculated. Please validate your PR first.');
+      return;
+    }
+
     setIsSubmitting(true)
+    setWithdrawalError(null)
     
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 2000))
-    
-    setIsSubmitting(false)
-    setSubmitted(true)
+    try {
+      console.log('=== SUBMITTING BOUNTY CLAIM ===');
+      console.log('Project ID:', projectId);
+      console.log('Calculated Bounty:', calculatedBounty);
+      console.log('Account Address:', account.address.toString());
+      console.log('============================');
+
+      // For now, we'll use the calculated bounty directly as APT
+      // In a real implementation, you'd want to get the current APT price from an API
+      // and convert the dollar amount to APT
+      const bountyInApt = calculatedBounty;
+      
+      // Use the contract client to withdraw the bounty
+      const result = await projectEscrowClient.withdrawFromProjectWithWallet(
+        account.address.toString(),
+        signAndSubmitTransaction,
+        0, // Use project ID 0 as requested
+        bountyInApt
+      );
+
+      if (result.success) {
+        console.log('Bounty withdrawal successful:', result.transactionHash);
+        setTransactionHash(result.transactionHash || null);
+        setWithdrawalSuccess(true);
+        setSubmitted(true);
+      } else {
+        console.error('Bounty withdrawal failed:', result.error);
+        setWithdrawalError(result.error || 'Failed to withdraw bounty from contract');
+      }
+
+    } catch (error) {
+      console.error('Error submitting bounty claim:', error);
+      setWithdrawalError(error instanceof Error ? error.message : 'Failed to submit bounty claim');
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   const handleInputChange = (field: keyof ClaimFormData, value: string) => {
@@ -359,17 +409,36 @@ export default function ClaimPage() {
                 <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-6">
                   <CheckCircle className="w-8 h-8 text-green-600" />
                 </div>
-                <h1 className="text-2xl font-semibold mb-4">Claim Submitted Successfully!</h1>
+                <h1 className="text-2xl font-semibold mb-4">Bounty Claim Successful!</h1>
                 <p className="text-muted-foreground mb-6">
-                  Your bounty claim has been submitted and is under review. You&apos;ll receive a notification once it&apos;s processed.
+                  Your bounty of <strong>${calculatedBounty?.toLocaleString()}</strong> has been successfully withdrawn from the blockchain.
                 </p>
+                
+                {transactionHash && (
+                  <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-md">
+                    <h3 className="font-medium text-green-900 mb-2">Transaction Details</h3>
+                    <div className="text-sm text-green-800">
+                      <div className="font-mono bg-white p-2 rounded border">
+                        {transactionHash}
+                      </div>
+                      <p className="mt-2 text-xs text-green-600">
+                        You can view this transaction on the Aptos blockchain explorer
+                      </p>
+                    </div>
+                  </div>
+                )}
+                
                 <div className="flex gap-3 justify-center">
                   <Button asChild>
                     <Link href="/contributor/dashboard">
                       Back to Dashboard
                     </Link>
                   </Button>
-                  <Button variant="outline" onClick={() => setSubmitted(false)}>
+                  <Button variant="outline" onClick={() => {
+                    setSubmitted(false);
+                    setTransactionHash(null);
+                    setWithdrawalSuccess(false);
+                  }}>
                     Submit Another Claim
                   </Button>
                 </div>
@@ -637,6 +706,30 @@ export default function ClaimPage() {
                     </div>
                   )}
 
+                  {/* Wallet Connection Status */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Wallet Status</label>
+                    {connected && account ? (
+                      <div className="p-3 bg-green-50 border border-green-200 rounded-md">
+                        <div className="flex items-center gap-2">
+                          <Wallet className="h-4 w-4 text-green-600" />
+                          <span className="text-sm font-medium text-green-700">
+                            Wallet Connected: {account.address.toString().slice(0, 6)}...{account.address.toString().slice(-4)}
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                        <div className="flex items-center gap-2">
+                          <AlertCircle className="h-4 w-4 text-yellow-600" />
+                          <span className="text-sm font-medium text-yellow-700">
+                            Please connect your wallet to submit the bounty claim
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   {/* Bounty Amount Field */}
                   {calculatedBounty !== null && (
                     <div className="space-y-2">
@@ -665,16 +758,34 @@ export default function ClaimPage() {
                     </div>
                   )}
 
+                  {/* Withdrawal Error Display */}
+                  {withdrawalError && (
+                    <div className="p-4 bg-red-50 border border-red-200 rounded-md">
+                      <div className="flex items-start gap-3">
+                        <AlertCircle className="h-5 w-5 text-red-600 mt-0.5" />
+                        <div>
+                          <h4 className="font-medium text-red-900">Withdrawal Error</h4>
+                          <p className="text-sm text-red-800 mt-1">{withdrawalError}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Submit Button */}
                   <Button 
                     type="submit" 
                     className="w-full bg-green-600 hover:bg-green-700 text-white"
-                    disabled={isSubmitting || !prValidation}
+                    disabled={isSubmitting || !prValidation || !connected}
                   >
                     {isSubmitting ? (
                       <>
                         <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                        Submitting Claim...
+                        Processing Blockchain Transaction...
+                      </>
+                    ) : !connected ? (
+                      <>
+                        <Wallet className="h-4 w-4 mr-2" />
+                        Connect Wallet to Claim
                       </>
                     ) : !prValidation ? (
                       <>
@@ -684,7 +795,7 @@ export default function ClaimPage() {
                     ) : (
                       <>
                         <DollarSign className="h-4 w-4 mr-2" />
-                        Submit Bounty Claim
+                        Withdraw Bounty from Blockchain
                       </>
                     )}
                   </Button>
