@@ -6,11 +6,23 @@ import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { Menu, Github } from "lucide-react"
+import { useSession } from "next-auth/react"
 import { AppSidebarContent } from "./app-sidebar"
 import { RealWalletConnect } from "./real-wallet-connect"
 
 export function AppHeader() {
   const [open, setOpen] = useState(false)
+  const { data: session } = useSession()
+
+  // Get user avatar and fallback initials
+  const userAvatar = session?.user?.image
+  const userName = session?.user?.name || session?.user?.githubUsername || "User"
+  const userInitials = userName
+    .split(" ")
+    .map((n: string) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2)
 
   return (
     <header className="sticky top-0 z-40 w-full border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -46,8 +58,8 @@ export function AppHeader() {
             </a>
           </Button>
           <Avatar>
-            <AvatarImage src="/user-avatar.png" alt="User avatar" />
-            <AvatarFallback>DV</AvatarFallback>
+            <AvatarImage src={userAvatar} alt={`${userName} avatar`} />
+            <AvatarFallback>{userInitials}</AvatarFallback>
           </Avatar>
         </div>
       </div>
