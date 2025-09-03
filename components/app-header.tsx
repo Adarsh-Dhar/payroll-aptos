@@ -16,7 +16,7 @@ export function AppHeader() {
 
   // Get user avatar and fallback initials
   const userAvatar = session?.user?.image
-  const userName = session?.user?.name || session?.user?.githubUsername || "User"
+  const userName = session?.user?.name || "User"
   const userInitials = userName
     .split(" ")
     .map((n: string) => n[0])
@@ -58,7 +58,7 @@ export function AppHeader() {
             </a>
           </Button>
           <Avatar>
-            <AvatarImage src={userAvatar} alt={`${userName} avatar`} />
+            <AvatarImage src={userAvatar || ''} alt={`${userName} avatar`} />
             <AvatarFallback>{userInitials}</AvatarFallback>
           </Avatar>
         </div>
