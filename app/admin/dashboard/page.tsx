@@ -1,7 +1,6 @@
 "use client"
 
 import { AppHeader } from "@/components/app-header"
-import { AppSidebar } from "@/components/app-sidebar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
@@ -195,7 +194,6 @@ export default function Page() {
 			<div className="min-h-screen bg-background">
 				<AppHeader />
 				<div className="flex">
-					<AppSidebar />
 					<main className="flex-1 p-6">
 						<div className="space-y-6">
 							{/* Header */}
@@ -219,8 +217,6 @@ export default function Page() {
 								</div>
 							</div>
 
-							{/* Contract Status */}
-							<ContractTestPanel />
 
 							{/* Overview Cards */}
 							<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

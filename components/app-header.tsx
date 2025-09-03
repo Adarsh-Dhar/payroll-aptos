@@ -7,7 +7,6 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { Menu, Github } from "lucide-react"
 import { useSession } from "next-auth/react"
-import { AppSidebarContent } from "./app-sidebar"
 import { RealWalletConnect } from "./real-wallet-connect"
 
 export function AppHeader() {
@@ -38,7 +37,6 @@ export function AppHeader() {
               <SheetHeader className="px-4 py-3">
                 <SheetTitle className="text-base">Navigation</SheetTitle>
               </SheetHeader>
-              <AppSidebarContent onNavigate={() => setOpen(false)} />
             </SheetContent>
           </Sheet>
 

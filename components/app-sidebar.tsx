@@ -21,9 +21,6 @@ export function AppSidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname()
   const items = [
     { label: "Dashboard", href: "/dashboard", icon: LayoutGrid },
-    { label: "Contributions", href: "/contributions", icon: GitPullRequest },
-    { label: "Wallet", href: "/wallet", icon: Wallet },
-    { label: "Settings", href: "/settings", icon: Settings },
   ]
 
   return (

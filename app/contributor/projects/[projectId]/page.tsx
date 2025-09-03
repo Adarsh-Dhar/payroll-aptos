@@ -1,5 +1,4 @@
 import { AppHeader } from "@/components/app-header"
-import { AppSidebar } from "@/components/app-sidebar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -126,7 +125,6 @@ export default async function ProjectPage({ params }: { params: { projectId: str
       <AppHeader />
       <div className="mx-auto flex w-full max-w-7xl">
         {/* Sidebar (desktop) */}
-        <AppSidebar className="hidden shrink-0 border-r bg-card/30 p-4 md:block md:w-64" />
         
         {/* Main */}
         <main className="flex-1 p-4 md:p-6">

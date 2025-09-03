@@ -107,6 +107,7 @@ export default function ClaimPage() {
   const [prClaimStatus, setPrClaimStatus] = useState<PRClaimStatus | null>(null)
   const [checkingClaimStatus, setCheckingClaimStatus] = useState(false)
   const [submittedPRs, setSubmittedPRs] = useState<Set<string>>(new Set())
+  const [isClaimable, setIsClaimable] = useState(false)
 
   // useEffect hooks must be called before any conditional returns
   useEffect(() => {
@@ -152,6 +153,133 @@ export default function ClaimPage() {
 
     fetchProjectDetails()
   }, [projectId, status])
+
+  // Helpers
+  const extractRepoFromUrl = (url: string): string | null => {
+    const m = url.match(/github\.com\/([^\/]+)\/([^\/#?]+)/)
+    if (!m) return null
+    return `${m[1]}/${m[2]}`
+  }
+
+  const handleValidatePR = async () => {
+    if (!project) return
+    setValidationError(null)
+    setValidatingPr(true)
+    try {
+      const baseUrl = process.env.NODE_ENV === 'development' 
+        ? 'http://localhost:3000' 
+        : process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+
+      const res = await fetch(`${baseUrl}/api/v1/contributor/validate-pr`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prUrl: formData.prUrl,
+          githubToken,
+          projectRepoUrl: project.repoUrl
+        })
+      })
+
+      const data = await res.json()
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || data.message || 'Validation failed')
+      }
+      setPrValidation(data)
+
+      const repository = extractRepoFromUrl(project.repoUrl)
+      const prNumber = Number(data.validation?.prNumber || data.validation?.pr_number)
+      if (repository && prNumber) {
+        const claimRes = await fetch(`${baseUrl}/api/v1/contributor/github-prs/claim-bounty`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prNumber, repository })
+        })
+        const claimJson = await claimRes.json()
+        if (claimRes.ok && claimJson.success) {
+          const calc = claimJson.data?.bountyCalculation?.calculatedBounty
+          if (typeof calc === 'number') setCalculatedBounty(calc)
+        } else {
+          const L = project.lowestBounty
+          const H = project.highestBounty
+          const D = H - L
+          const score = Number(data.analysis?.final_score || 0)
+          const bounty = L + (D * score / 10)
+          setCalculatedBounty(Number.isFinite(bounty) ? bounty : L)
+        }
+      }
+
+      const statusRes = await fetch(`${baseUrl}/api/v1/contributor/pr-claim-status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'check', prUrl: formData.prUrl, projectId: project.id })
+      })
+      const statusJson = await statusRes.json()
+      if (statusRes.ok && statusJson.success) {
+        setPrClaimStatus(statusJson)
+        setIsClaimable(!statusJson.isClaimed)
+      } else {
+        setIsClaimable(false)
+      }
+    } catch (e: any) {
+      setValidationError(e?.message || 'Failed to validate PR')
+      setIsClaimable(false)
+    } finally {
+      setValidatingPr(false)
+    }
+  }
+
+  const handleClaim = async () => {
+    if (!project) return
+    if (!connected || !account) {
+      setWithdrawalError('Please connect your wallet to claim')
+      return
+    }
+    if (!formData.prUrl) {
+      setWithdrawalError('Please enter a valid PR URL')
+      return
+    }
+    setWithdrawalError(null)
+    setIsSubmitting(true)
+    try {
+      const withdrawRes = await projectEscrowClient.withdrawFromProjectWithWallet(
+        account.address.toString(),
+        signAndSubmitTransaction,
+        Number(project.id),
+        0.01
+      )
+
+      if (!withdrawRes.success) {
+        throw new Error(withdrawRes.error || 'Blockchain withdrawal failed')
+      }
+
+      setTransactionHash(withdrawRes.transactionHash || null)
+      setWithdrawalSuccess(true)
+
+      const baseUrl = process.env.NODE_ENV === 'development' 
+        ? 'http://localhost:3000' 
+        : process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+      const markRes = await fetch(`${baseUrl}/api/v1/contributor/pr-claim-status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'mark-claimed',
+          prUrl: formData.prUrl,
+          projectId: project.id,
+          bountyAmount: calculatedBounty || 0
+        })
+      })
+      const markJson = await markRes.json()
+      if (!markRes.ok || !markJson.success) {
+        throw new Error(markJson.message || 'Failed to record claim')
+      }
+
+      setSubmitted(true)
+    } catch (e: any) {
+      setWithdrawalError(e?.message || 'Failed to claim bounty')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
 
   // NOW ALL HOOKS HAVE BEEN CALLED, WE CAN HAVE CONDITIONAL RENDERING
   // Render loading state for authentication
@@ -363,6 +491,45 @@ export default function ClaimPage() {
                     <p className="text-xs text-muted-foreground">
                       Enter the full GitHub PR URL to validate your contribution.
                     </p>
+                    <div className="flex gap-2 pt-2">
+                      <Button onClick={handleValidatePR} disabled={!githubToken || !formData.prUrl || validatingPr}>
+                        {validatingPr ? (
+                          <span className="inline-flex items-center"><Loader2 className="h-4 w-4 mr-2 animate-spin"/>Validating…</span>
+                        ) : (
+                          'Validate PR'
+                        )}
+                      </Button>
+                      <Button variant="outline" onClick={() => {
+                        setPrValidation(null);
+                        setCalculatedBounty(null);
+                        setPrClaimStatus(null);
+                        setValidationError(null);
+                        setIsClaimable(false);
+                      }}>Reset</Button>
+                    </div>
+                    {validationError && (
+                      <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700 flex items-start gap-2">
+                        <XCircle className="h-4 w-4 mt-0.5" />
+                        <span>{validationError}</span>
+                      </div>
+                    )}
+                    {prValidation && (
+                      <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-800">
+                        <div className="font-medium mb-1">PR Validated</div>
+                        <div>PR #{prValidation.validation.prNumber} • {prValidation.validation.prTitle}</div>
+                        <div>Author: {prValidation.validation.prAuthor}</div>
+                      </div>
+                    )}
+                    {typeof calculatedBounty === 'number' && (
+                      <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded text-sm text-green-800">
+                        Estimated Bounty: ${calculatedBounty.toLocaleString()}
+                      </div>
+                    )}
+                    {prClaimStatus && prClaimStatus.isClaimed && (
+                      <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
+                        This PR is already claimed{prClaimStatus.claimedAmount ? ` ($${prClaimStatus.claimedAmount})` : ''}.
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-2">
@@ -390,11 +557,21 @@ export default function ClaimPage() {
 
                   <Button 
                     className="w-full bg-green-600 hover:bg-green-700 text-white"
-                    disabled={!connected}
+                    disabled={!connected || !isClaimable || isSubmitting || !prValidation}
+                    onClick={handleClaim}
                   >
-                    <Wallet className="h-4 w-4 mr-2" />
-                    Connect Wallet to Claim
+                    {isSubmitting ? (
+                      <span className="inline-flex items-center"><Loader2 className="h-4 w-4 mr-2 animate-spin"/>Processing…</span>
+                    ) : (
+                      <span className="inline-flex items-center"><Wallet className="h-4 w-4 mr-2" />Claim Bounty</span>
+                    )}
                   </Button>
+                  {withdrawalError && (
+                    <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700 flex items-start gap-2">
+                      <XCircle className="h-4 w-4 mt-0.5" />
+                      <span>{withdrawalError}</span>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
