@@ -63,7 +63,6 @@ List all projects with pagination and filtering.
       "name": "DevPayStream Core",
       "description": "Main payment processing system",
       "githubUrl": "https://github.com/devpaystream/core",
-      "budget": 10000,
       "active": true,
       "createdAt": "2024-01-01T00:00:00.000Z",
       "updatedAt": "2024-01-01T00:00:00.000Z"
@@ -87,7 +86,6 @@ Create a new project (admin only).
   "name": "New Project",
   "description": "Project description",
   "githubUrl": "https://github.com/org/project",
-  "budget": 5000,
   "active": true
 }
 ```

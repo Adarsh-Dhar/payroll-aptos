@@ -18,7 +18,7 @@ interface Project {
   name: string
   description: string | null
   repoUrl: string
-  budget: number
+  // no USD funding tracked
   isActive: boolean
   maxContributors: number | null
   tags: string[]
@@ -488,7 +488,7 @@ export default function ClaimPage() {
                     <div className="p-3 bg-muted rounded-md border">
                       <div className="font-medium">{project.name}</div>
                       <div className="text-sm text-muted-foreground">
-                        Budget: ${project.budget.toLocaleString()} • ID: {project.id}
+                        ID: {project.id}
                       </div>
                       <div className="text-sm text-muted-foreground mt-1">
                         Bounty Range: ${project.lowestBounty.toLocaleString()} - ${project.highestBounty.toLocaleString()}

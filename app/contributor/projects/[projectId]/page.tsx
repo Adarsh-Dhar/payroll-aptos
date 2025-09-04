@@ -25,7 +25,7 @@ interface Project {
   name: string
   description: string | null
   repoUrl: string
-  budget: number
+  // no USD funding tracked
   isActive: boolean
   maxContributors: number | null
   tags: string[]
@@ -115,8 +115,8 @@ export default async function ProjectPage({ params }: { params: { projectId: str
   // Calculate project statistics
   const mergedPRs = project.pullRequests.filter(pr => pr.merged).length
   const totalEarnings = project.payouts.reduce((sum, p) => sum + p.amount, 0)
-  const budgetRemaining = project.budget - totalEarnings
-  const budgetUtilization = (totalEarnings / project.budget) * 100
+  const budgetRemaining = 0
+  const budgetUtilization = 0
   const averageScore = project.pullRequests.length > 0 ? 
     project.pullRequests.reduce((sum, pr) => sum + pr.score, 0) / project.pullRequests.length : 0
 
@@ -202,12 +202,12 @@ export default async function ProjectPage({ params }: { params: { projectId: str
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm text-muted-foreground flex items-center gap-2">
                     <DollarSign className="h-4 w-4" />
-                    Total Budget
+                    Funding (APT)
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-semibold mb-1">
-                    ${project.budget.toLocaleString()}
+                    On-chain escrow only
                   </div>
                   <p className="text-xs text-muted-foreground">
                     ${budgetRemaining.toLocaleString()} remaining

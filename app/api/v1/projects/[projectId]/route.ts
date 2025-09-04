@@ -8,7 +8,6 @@ const updateProjectSchema = z.object({
   name: z.string().min(1).optional(),
   description: z.string().optional(),
   repoUrl: z.string().url().optional(),
-  budget: z.number().positive().optional(),
   lowestBounty: z.number().positive().optional(),
   highestBounty: z.number().positive().optional(),
   adminId: z.number().int().positive().optional(),

@@ -35,18 +35,17 @@ export async function GET(request: NextRequest) {
       })
     ]);
 
-    // Get budget information
-    const projectsWithBudget = await prisma.project.findMany({
+    // Get payouts information
+    const projectsWithPayouts = await prisma.project.findMany({
       select: {
-        budget: true,
         Payout: {
           select: { amount: true }
         }
       }
     });
 
-    const totalBudget = projectsWithBudget.reduce((sum, project) => sum + project.budget, 0);
-    const totalSpent = projectsWithBudget.reduce((sum, project) => 
+    const totalBudget = 0;
+    const totalSpent = projectsWithPayouts.reduce((sum, project) => 
       sum + project.Payout.reduce((payoutSum, payout) => payoutSum + payout.amount, 0), 0
     );
 
@@ -92,7 +91,6 @@ export async function GET(request: NextRequest) {
       select: {
         id: true,
         name: true,
-        budget: true,
         _count: {
           select: {
             PullRequest: true,
@@ -120,11 +118,10 @@ export async function GET(request: NextRequest) {
       return {
         id: project.id,
         name: project.name,
-        budget: project.budget,
         totalPRs: project._count.PullRequest,
         mergedPRs,
         totalPayouts,
-        budgetUtilization: project.budget > 0 ? (totalPayouts / project.budget) * 100 : 0,
+        budgetUtilization: 0,
         averageScore: Math.round(averageScore * 10) / 10,
       };
     });
@@ -161,9 +158,9 @@ export async function GET(request: NextRequest) {
       success: true,
       data: {
         overview: {
-          totalBudget,
+          totalInitialFunding: totalBudget,
           totalSpent,
-          remainingBudget: totalBudget - totalSpent,
+          remainingInitialFunding: totalBudget - totalSpent,
           totalProjects,
           totalDevelopers,
           totalPRs,
@@ -183,7 +180,7 @@ export async function GET(request: NextRequest) {
           averagePayoutAmount: totalPayouts._sum.amount && mergedPRs > 0 ? 
             totalPayouts._sum.amount / mergedPRs : 0,
           projectSuccessRate: totalPRs > 0 ? (mergedPRs / totalPRs) * 100 : 0,
-          budgetUtilizationRate: totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0,
+          fundingUtilizationRate: totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0,
         }
       }
     });

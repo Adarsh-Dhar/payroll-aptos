@@ -21,7 +21,7 @@ type CreateProjectFormState = {
 	name: string
 	description: string
 	repoUrl: string
-	budget: string
+	initialFunding: string
 	lowestBounty: string
 	highestBounty: string
 	fundingAmount: string
@@ -34,7 +34,7 @@ export function CreateProjectDialog() {
 		name: "",
 		description: "",
 		repoUrl: "",
-		budget: "",
+		initialFunding: "",
 		lowestBounty: "",
 		highestBounty: "",
 		fundingAmount: "",
@@ -75,7 +75,7 @@ export function CreateProjectDialog() {
 				name: form.name.trim(),
 				description: form.description.trim() || undefined,
 				repoUrl: form.repoUrl.trim(),
-				budget: Number(form.budget),
+				initialFunding: Number(form.initialFunding),
 				lowestBounty: Number(form.lowestBounty),
 				highestBounty: Number(form.highestBounty),
 			}
@@ -97,7 +97,7 @@ export function CreateProjectDialog() {
 					name: "", 
 					description: "", 
 					repoUrl: "", 
-					budget: "", 
+					initialFunding: "", 
 					lowestBounty: "", 
 					highestBounty: "", 
 					fundingAmount: "" 
@@ -193,19 +193,7 @@ export function CreateProjectDialog() {
 							required
 						/>
 					</div>
-					<div className="grid gap-2">
-						<Label htmlFor="budget">Total Budget (USD)</Label>
-						<Input
-							id="budget"
-							type="number"
-							min="0"
-							step="0.01"
-							placeholder="5000"
-							value={form.budget}
-							onChange={(e) => setForm((s) => ({ ...s, budget: e.target.value }))}
-							required
-						/>
-					</div>
+					{/* USD initial funding removed; only APT funding is required */}
 					<div className="grid gap-2">
 						<Label htmlFor="fundingAmount">Initial Funding Amount (APT)</Label>
 						<Input

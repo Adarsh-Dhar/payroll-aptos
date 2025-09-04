@@ -45,7 +45,6 @@ curl -X POST "http://localhost:3000/api/v1/projects" \
     "name": "New API Project",
     "description": "Building a new API service",
     "githubUrl": "https://github.com/org/new-api",
-    "budget": 8000,
     "active": true
   }'
 ```
@@ -62,7 +61,6 @@ curl -X PUT "http://localhost:3000/api/v1/projects/1" \
   -H "Authorization: Bearer mock-jwt-123456789" \
   -H "Content-Type: application/json" \
   -d '{
-    "budget": 12000,
     "description": "Updated project description"
   }'
 ```
@@ -325,7 +323,7 @@ interface Project {
   id: string;
   name: string;
   description: string;
-  budget: number;
+  // no USD funding tracked
   active: boolean;
 }
 
@@ -439,8 +437,7 @@ curl -X POST "http://localhost:3000/api/v1/projects" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "<script>alert(\"xss\")</script>",
-    "description": "XSS test",
-    "budget": 1000
+    "description": "XSS test"
   }'
 ```
 

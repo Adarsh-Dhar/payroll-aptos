@@ -16,7 +16,7 @@ interface Project {
   name: string
   description: string | null
   repoUrl: string
-  budget: number
+  // no USD funding tracked
   isActive: boolean
   maxContributors: number | null
   tags: string[]
@@ -153,20 +153,6 @@ export default function Page() {
               <p className="text-muted-foreground">
                 Browse and claim bounties for your contributions to these open source projects.
               </p>
-              <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-md">
-                <div className="flex items-start gap-2">
-                  <CheckCircle className="h-4 w-4 text-blue-600 mt-0.5" />
-                  <div className="text-sm text-blue-800">
-                    <p className="font-medium mb-1">How to claim your bounty:</p>
-                    <ol className="list-decimal list-inside space-y-1 text-xs">
-                      <li>Browse available projects below</li>
-                      <li>Click &quot;Claim Bounty&quot; on a project you&apos;ve contributed to</li>
-                      <li>Provide your GitHub PR details and validate your contribution</li>
-                      <li>Submit your claim for review</li>
-                    </ol>
-                  </div>
-                </div>
-              </div>
             </div>
 
             {/* Search and Filter Controls */}
@@ -226,9 +212,7 @@ export default function Page() {
                             <Badge variant={project.isActive ? "default" : "secondary"}>
                               {project.isActive ? "Active" : "Inactive"}
                             </Badge>
-                            <Badge variant="outline" className="bg-green-100 text-green-800 border-green-300">
-                              ${project.budget.toLocaleString()}
-                            </Badge>
+                            {/* USD funding removed */}
                           </div>
                         </div>
                       </div>
@@ -339,10 +323,7 @@ export default function Page() {
                     <div className="text-sm text-muted-foreground">Total Projects</div>
                   </div>
                   <div>
-                    <div className="text-2xl font-bold text-green-600">
-                      ${filteredProjects.reduce((sum, p) => sum + p.budget, 0).toLocaleString()}
-                    </div>
-                    <div className="text-sm text-muted-foreground">Total Budget</div>
+                    {/* Removed total USD funding summary */}
                   </div>
                   <div>
                     <div className="text-2xl font-bold text-blue-600">

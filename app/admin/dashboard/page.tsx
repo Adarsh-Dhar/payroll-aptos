@@ -20,9 +20,9 @@ import { Loader2 } from "lucide-react"
 // Define the data types based on our API response
 interface DashboardData {
   overview: {
-    totalBudget: number
+    totalInitialFunding: number // deprecated, server returns 0 now
     totalSpent: number
-    remainingBudget: number
+    remainingInitialFunding: number // deprecated, server returns 0 now
     totalProjects: number
     totalDevelopers: number
     totalPRs: number
@@ -52,7 +52,7 @@ interface DashboardData {
   projectPerformance: Array<{
     id: number
     name: string
-    budget: number
+    initialFunding: number // deprecated, server omits
     totalPRs: number
     mergedPRs: number
     totalPayouts: number
@@ -63,7 +63,7 @@ interface DashboardData {
     averagePRScore: number
     averagePayoutAmount: number
     projectSuccessRate: number
-    budgetUtilizationRate: number
+    fundingUtilizationRate: number // deprecated, server returns payout-based metrics
   }
 }
 
