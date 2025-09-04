@@ -137,9 +137,9 @@ export async function POST(request: NextRequest) {
             name: repository,
             description: `Auto-created project for repository ${repository}`,
             repoUrl: `https://github.com/${repository}`,
-            budget: 10000, // Default budget
-            lowestBounty: 100, // Default lowest bounty
-            highestBounty: 1000, // Default highest bounty
+            budget: 100, // Default budget
+            lowestBounty: 0.01, // Default lowest bounty
+            highestBounty: 0.10, // Default highest bounty
             adminId: 1, // Default admin ID
             updatedAt: new Date(),
           } as any

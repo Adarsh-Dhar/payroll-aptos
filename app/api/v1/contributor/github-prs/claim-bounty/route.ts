@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    const { prNumber, repository, additions, deletions, hasTests, description, commits, bountyAmount: providedBountyAmount } = body;
+    const { prNumber, repository, additions, deletions, hasTests, description, commits, bountyAmount: providedBountyAmount, projectId } = body;
     
     console.log('Parsed claim request data:', {
       prNumber,
@@ -42,7 +42,8 @@ export async function POST(request: NextRequest) {
       hasTests,
       description,
       commits,
-      providedBountyAmount
+      providedBountyAmount,
+      projectId
     });
 
     if (!prNumber || !repository) {
@@ -80,35 +81,67 @@ export async function POST(request: NextRequest) {
     // Check if we have a project in the database with this repository
     const prisma = new PrismaClient();
     let project = null;
-    let lowestBounty = 100; // Default values
-    let highestBounty = 1000;
+    let lowestBounty = 0.01; // Default values - using cents for small projects
+    let highestBounty = 0.10;
     
     try {
-      // Look for project by repoUrl or name
-      project = await prisma.project.findFirst({
-        where: {
-          OR: [
-            { repoUrl: { contains: repository } },
-            { name: { contains: repository } },
-            { name: { contains: repoName } }
-          ]
-        },
-        select: {
-          id: true,
-          name: true,
-          repoUrl: true,
-          lowestBounty: true,
-          highestBounty: true,
-        }
-      });
+      // Look for project by ID first (if provided), then by repoUrl or name
+      if (projectId) {
+        project = await prisma.project.findUnique({
+          where: { id: parseInt(projectId) },
+          select: {
+            id: true,
+            name: true,
+            repoUrl: true,
+            lowestBounty: true,
+            highestBounty: true,
+          }
+        });
+        console.log('Looking up project by ID:', projectId);
+      }
+      
+      // If not found by ID, try by repository
+      if (!project) {
+        project = await prisma.project.findFirst({
+          where: {
+            OR: [
+              { repoUrl: { contains: repository } },
+              { name: { contains: repository } },
+              { name: { contains: repoName } }
+            ]
+          },
+          select: {
+            id: true,
+            name: true,
+            repoUrl: true,
+            lowestBounty: true,
+            highestBounty: true,
+          }
+        });
+        console.log('Looking up project by repository:', repository);
+      }
       
       if (project) {
         console.log('✅ Project found in database:', project);
-        lowestBounty = project.lowestBounty || 100;
-        highestBounty = project.highestBounty || 1000;
+        lowestBounty = project.lowestBounty || 0.01;
+        highestBounty = project.highestBounty || 0.10;
+        
+        console.log('📊 Project bounty configuration:');
+        console.log(`   - Lowest Bounty: $${project.lowestBounty}`);
+        console.log(`   - Highest Bounty: $${project.highestBounty}`);
+        console.log(`   - Difference: $${(project.highestBounty || 0.10) - (project.lowestBounty || 0.01)}`);
+        
+        // Check if bounty ranges are too small and adjust if needed
+        if (highestBounty - lowestBounty < 0.01) {
+          console.log('⚠️ Project bounty range is too small, adjusting to reasonable defaults');
+          console.log('Original range:', { lowestBounty: project.lowestBounty, highestBounty: project.highestBounty });
+          lowestBounty = 0.01;
+          highestBounty = 0.10;
+        }
       } else {
         console.log('⚠️ Project not found in database, using default bounty values');
         console.log('Searched for:', { repository, repoOwner, repoName });
+        console.log('This might be why the bounty calculation is wrong!');
       }
     } catch (error) {
       console.error('Database error:', error);
@@ -120,6 +153,11 @@ export async function POST(request: NextRequest) {
     // Get contribution score from the GitHub contribution API
     console.log('=== GETTING CONTRIBUTION SCORE FROM GITHUB API ===');
     let contributionScore = 0;
+    let detailedAnalysis = null;
+    let metricScores = null;
+    let category = 'medium';
+    let reasoning = '';
+    let keyInsights = null;
     
     // Check if GitHub contribution API is available
     const baseUrl = process.env.NODE_ENV === 'development' 
@@ -149,8 +187,17 @@ export async function POST(request: NextRequest) {
       if (contributionResponse.ok) {
         const contributionData = await contributionResponse.json();
         if (contributionData.success && contributionData.analysis) {
-          contributionScore = contributionData.analysis.final_score || 0;
+          detailedAnalysis = contributionData.analysis;
+          contributionScore = detailedAnalysis.final_score || 0;
+          metricScores = detailedAnalysis.metric_scores;
+          category = detailedAnalysis.category || 'medium';
+          reasoning = detailedAnalysis.reasoning || '';
+          keyInsights = detailedAnalysis.key_insights;
+          
           console.log('✅ Contribution score from GitHub API:', contributionScore);
+          console.log('📊 Category:', category);
+          console.log('📈 Metric scores:', metricScores);
+          console.log('💭 Reasoning:', reasoning);
         } else {
           console.log('⚠️ GitHub API response not successful, using fallback score');
         }
@@ -166,19 +213,51 @@ export async function POST(request: NextRequest) {
     // Fallback contribution score calculation if API fails
     if (contributionScore === 0) {
       console.log('=== FALLBACK CONTRIBUTION SCORE CALCULATION ===');
-      let score = 0;
-      score += 10; // Base score
-      if (hasTests) score += 20;
-      if (description && description.length > 100) score += 15;
+      
+      // Enhanced fallback calculation based on PR characteristics
       const totalChanges = (additions || 0) + (deletions || 0);
-      if (totalChanges > 0) {
-        score += Math.min(20, totalChanges * 0.1);
-      }
-      if (commits && commits.length > 0) {
-        score += Math.min(15, commits.length * 0.5);
-      }
-      contributionScore = Math.min(100, score);
+      const changedFiles = 1; // Default assumption
+      
+      // Calculate code size score (1-10)
+      let codeSizeScore = 5; // Default medium
+      if (totalChanges < 50) codeSizeScore = 2; // Small changes
+      else if (totalChanges < 200) codeSizeScore = 5; // Medium changes
+      else if (totalChanges < 500) codeSizeScore = 7; // Large changes
+      else codeSizeScore = 9; // Very large changes
+      
+      // Calculate review quality score (1-10)
+      let reviewQualityScore = 6; // Default
+      if (hasTests) reviewQualityScore += 2;
+      if (description && description.length > 100) reviewQualityScore += 1;
+      if (commits && commits.length > 1) reviewQualityScore += 1;
+      reviewQualityScore = Math.min(10, reviewQualityScore);
+      
+      // Calculate final score (weighted average)
+      contributionScore = Math.round((codeSizeScore * 0.6 + reviewQualityScore * 0.4) * 10) / 10;
+      
+      // Create fallback metric scores
+      metricScores = {
+        code_size: codeSizeScore,
+        review_cycles: 6, // Default assumption
+        review_time: 6, // Default assumption
+        first_review_wait: 6, // Default assumption
+        review_depth: reviewQualityScore,
+        code_quality: reviewQualityScore
+      };
+      
+      category = contributionScore < 4 ? 'easy' : contributionScore < 7 ? 'medium' : 'hard';
+      reasoning = `Fallback calculation: Code size (${codeSizeScore}/10) and review quality (${reviewQualityScore}/10) based on changes (${totalChanges} lines), tests (${hasTests}), and description length (${description?.length || 0} chars).`;
+      
+      keyInsights = {
+        complexity_indicators: `Based on ${totalChanges} lines changed, this appears to be a ${category} contribution.`,
+        quality_indicators: `Code quality indicators: ${hasTests ? 'includes tests' : 'no tests'}, ${description && description.length > 100 ? 'detailed description' : 'minimal description'}.`,
+        timeline_analysis: 'Timeline analysis not available in fallback mode.',
+        risk_assessment: `Estimated ${category} risk based on code size and quality indicators.`
+      };
+      
       console.log('Fallback contribution score:', contributionScore);
+      console.log('Fallback category:', category);
+      console.log('Fallback metric scores:', metricScores);
     }
     
     // Calculate difference for logging purposes
@@ -193,17 +272,33 @@ export async function POST(request: NextRequest) {
       console.log(`Project bounty range: $${lowestBounty} - $${highestBounty}`);
       console.log(`Difference: $${difference}`);
     } else {
-      // Calculate bounty using the formula: L + (D * x / 10)
-      // where L = lowest bounty, D = difference between highest and lowest, x = score
+      // Calculate bounty using the formula: L + (D * score / 10)
+      // where L = lowest bounty, D = difference between highest and lowest, score = 0-10 scale
+      // The score is already on a 0-10 scale, so we divide by 10 to get the multiplier
       bountyAmount = lowestBounty + (difference * contributionScore / 10);
       console.log('=== BOUNTY CALCULATION ===');
       console.log(`PR Number: ${prNumber}`);
       console.log(`Repository: ${repository}`);
       console.log(`Project found: ${project ? 'Yes' : 'No'}`);
       console.log(`Database bounty range: $${lowestBounty} - $${highestBounty}`);
-      console.log(`Contribution Score: ${contributionScore}`);
-      console.log(`Bounty Formula: L + (D × x / 10) = ${lowestBounty} + (${difference} × ${contributionScore} / 10)`);
+      console.log(`Contribution Score: ${contributionScore}/10`);
+      console.log(`Difference (D): $${difference}`);
+      console.log(`Bounty Formula: L + (D × score / 10) = ${lowestBounty} + (${difference} × ${contributionScore} / 10)`);
+      console.log(`Step by step: ${lowestBounty} + (${difference} × ${contributionScore} / 10) = ${lowestBounty} + (${(difference * contributionScore / 10).toFixed(4)}) = ${bountyAmount}`);
       console.log(`Calculated Bounty: $${bountyAmount}`);
+      console.log(`Verification: If score is ${contributionScore}/10, multiplier is ${(contributionScore / 10).toFixed(3)}`);
+      console.log(`Verification: Difference × multiplier = ${difference} × ${(contributionScore / 10).toFixed(3)} = ${(difference * contributionScore / 10).toFixed(4)}`);
+      
+      // Ensure minimum bounty amount (but allow exceeding maximum)
+      if (bountyAmount < lowestBounty) {
+        console.log(`⚠️ Calculated bounty ($${bountyAmount}) is less than minimum ($${lowestBounty}), using minimum`);
+        bountyAmount = lowestBounty;
+      }
+      // Note: We allow the bounty to exceed the maximum if the calculation results in a higher value
+      // The maximum is a guideline, not a hard cap
+      if (bountyAmount > highestBounty) {
+        console.log(`ℹ️ Calculated bounty ($${bountyAmount}) exceeds maximum guideline ($${highestBounty}), using calculated value`);
+      }
     }
     
     // Additional PR details for debugging
@@ -256,6 +351,20 @@ export async function POST(request: NextRequest) {
     console.log(`💰 Amount: $${bountyAmount}`);
     console.log(`📁 Repository: ${repository}`);
     console.log(`👤 User: ${session.user.email}`);
+    console.log(`🔍 Final bounty amount being returned: $${bountyAmount}`);
+    console.log(`🔍 Project used: ${project ? `ID ${project.id} (${project.name})` : 'None'}`);
+    console.log(`📊 PR Analysis Summary:`);
+    console.log(`   - Final Score: ${contributionScore}/10`);
+    console.log(`   - Category: ${category}`);
+    console.log(`   - Used API: ${!!detailedAnalysis ? 'Yes' : 'No (Fallback)'}`);
+    if (metricScores) {
+      console.log(`   - Code Size: ${metricScores.code_size}/10`);
+      console.log(`   - Review Cycles: ${metricScores.review_cycles}/10`);
+      console.log(`   - Review Time: ${metricScores.review_time}/10`);
+      console.log(`   - First Review Wait: ${metricScores.first_review_wait}/10`);
+      console.log(`   - Review Depth: ${metricScores.review_depth}/10`);
+      console.log(`   - Code Quality: ${metricScores.code_quality}/10`);
+    }
 
     return NextResponse.json({
       success: true,
@@ -265,6 +374,7 @@ export async function POST(request: NextRequest) {
         repository,
         bountyAmount: bountyAmount,
         contributionScore,
+        category,
         project: project ? {
           id: project.id,
           name: project.name,
@@ -276,7 +386,21 @@ export async function POST(request: NextRequest) {
           difference,
           contributionScore,
           calculatedBounty: bountyAmount,
-          formula: `L + (D × x / 10) = ${lowestBounty} + (${difference} × ${contributionScore} / 10) = ${bountyAmount}`
+          formula: `L + (D × score / 10) = ${lowestBounty} + (${difference} × ${contributionScore} / 10) = ${bountyAmount}`,
+          stepByStep: `${lowestBounty} + (${difference} × ${contributionScore} / 10) = ${lowestBounty} + (${(difference * contributionScore / 10).toFixed(4)}) = ${bountyAmount}`
+        },
+        prAnalysis: {
+          finalScore: contributionScore,
+          category,
+          metricScores,
+          reasoning,
+          keyInsights,
+          usedApi: !!detailedAnalysis,
+          metadata: detailedAnalysis ? {
+            analyzedAt: new Date().toISOString(),
+            hasLinkedIssue: false, // Could be enhanced to check for linked issues
+            usedLlm: false // Could be enhanced to track LLM usage
+          } : null
         }
       }
     });

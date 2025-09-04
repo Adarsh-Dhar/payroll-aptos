@@ -101,6 +101,8 @@ export default function ClaimPage() {
   const [validatingPr, setValidatingPr] = useState(false)
   const [validationError, setValidationError] = useState<string | null>(null)
   const [calculatedBounty, setCalculatedBounty] = useState<number | null>(null)
+  const [prScore, setPrScore] = useState<number | null>(null)
+  const [bountyCalculation, setBountyCalculation] = useState<any>(null)
   const [withdrawalError, setWithdrawalError] = useState<string | null>(null)
   const [withdrawalSuccess, setWithdrawalSuccess] = useState(false)
   const [transactionHash, setTransactionHash] = useState<string | null>(null)
@@ -139,6 +141,7 @@ export default function ClaimPage() {
         
         const result = await response.json()
         if (result.success) {
+          console.log('Project data loaded:', result.data)
           setProject(result.data)
           setFormData(prev => ({ ...prev, projectId: projectId.toString() }))
         } else {
@@ -185,6 +188,21 @@ export default function ClaimPage() {
         throw new Error(data.error || data.message || 'Validation failed')
       }
       setPrValidation(data)
+      
+      // Extract and store the PR score from the analysis
+      if (data.analysis && data.analysis.final_score) {
+        setPrScore(data.analysis.final_score)
+        console.log('PR Score extracted:', data.analysis.final_score)
+        console.log('Full analysis data:', data.analysis)
+        console.log('Project bounty range:', { lowest: project.lowestBounty, highest: project.highestBounty })
+      } else {
+        console.log('No PR score found in validation response')
+        console.log('Available data keys:', Object.keys(data))
+        if (data.analysis) {
+          console.log('Analysis object keys:', Object.keys(data.analysis))
+        }
+        setPrScore(null)
+      }
 
       const repository = extractRepoFromUrl(project.repoUrl)
       const prNumber = Number(data.validation?.prNumber || data.validation?.pr_number)
@@ -192,18 +210,28 @@ export default function ClaimPage() {
         const claimRes = await fetch(`${baseUrl}/api/v1/contributor/github-prs/claim-bounty`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prNumber, repository })
+          body: JSON.stringify({ prNumber, repository, projectId: project.id })
         })
         const claimJson = await claimRes.json()
+        console.log('Claim API response:', claimJson)
+        console.log('Claim API response status:', claimRes.status)
         if (claimRes.ok && claimJson.success) {
           const calc = claimJson.data?.bountyCalculation?.calculatedBounty
+          const bountyCalc = claimJson.data?.bountyCalculation
+          console.log('✅ API call successful, using API bounty:', calc)
+          console.log('✅ Bounty calculation data:', bountyCalc)
           if (typeof calc === 'number') setCalculatedBounty(calc)
+          if (bountyCalc) setBountyCalculation(bountyCalc)
         } else {
+          // Fallback calculation using the proper L + Dx/10 formula
           const L = project.lowestBounty
           const H = project.highestBounty
           const D = H - L
-          const score = Number(data.analysis?.final_score || 0)
+          const score = Number(data.analysis?.final_score || 8.0) // Default to 8.0 if no score
           const bounty = L + (D * score / 10)
+          console.log('❌ Claim API failed, using fallback calculation')
+          console.log('Fallback bounty calculation:', { L, H, D, score, bounty })
+          console.log('API error:', claimJson)
           setCalculatedBounty(Number.isFinite(bounty) ? bounty : L)
         }
       }
@@ -245,7 +273,7 @@ export default function ClaimPage() {
         account.address.toString(),
         signAndSubmitTransaction,
         Number(project.id),
-        0.01
+        calculatedBounty || 0.01
       )
 
       if (!withdrawRes.success) {
@@ -405,6 +433,8 @@ export default function ClaimPage() {
                     setPrClaimStatus(null);
                     setPrValidation(null);
                     setCalculatedBounty(null);
+                    setPrScore(null);
+                    setBountyCalculation(null);
                     setValidationError(null);
                     setWithdrawalError(null);
                     setSubmittedPRs(new Set());
@@ -502,6 +532,8 @@ export default function ClaimPage() {
                       <Button variant="outline" onClick={() => {
                         setPrValidation(null);
                         setCalculatedBounty(null);
+                        setPrScore(null);
+                        setBountyCalculation(null);
                         setPrClaimStatus(null);
                         setValidationError(null);
                         setIsClaimable(false);
@@ -518,11 +550,39 @@ export default function ClaimPage() {
                         <div className="font-medium mb-1">PR Validated</div>
                         <div>PR #{prValidation.validation.prNumber} • {prValidation.validation.prTitle}</div>
                         <div>Author: {prValidation.validation.prAuthor}</div>
+                        {prScore !== null ? (
+                          <div className="mt-2 pt-2 border-t border-blue-300">
+                            <div className="flex items-center gap-2">
+                              <Shield className="h-4 w-4" />
+                              <span className="font-medium">Contribution Score: {prScore.toFixed(1)}/10</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="mt-2 pt-2 border-t border-blue-300">
+                            <div className="flex items-center gap-2">
+                              <AlertCircle className="h-4 w-4" />
+                              <span className="text-xs">Score calculation in progress...</span>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                     {typeof calculatedBounty === 'number' && (
                       <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded text-sm text-green-800">
-                        Estimated Bounty: ${calculatedBounty.toLocaleString()}
+                        <div className="font-medium mb-1">Estimated Bounty: ${calculatedBounty.toFixed(4)}</div>
+                        {bountyCalculation ? (
+                          <div className="text-xs text-green-700 mt-1">
+                            <div>Formula: {bountyCalculation.formula}</div>
+                            {bountyCalculation.stepByStep && (
+                              <div className="mt-1 font-mono">{bountyCalculation.stepByStep}</div>
+                            )}
+                          </div>
+                        ) : prScore !== null ? (
+                          <div className="text-xs text-green-700 mt-1">
+                            <div>Formula: L + (D × score / 10) = ${project.lowestBounty} + (${(project.highestBounty - project.lowestBounty).toFixed(2)} × {prScore.toFixed(1)} / 10)</div>
+                            <div className="mt-1 font-mono">= ${project.lowestBounty} + ${((project.highestBounty - project.lowestBounty) * prScore / 10).toFixed(4)} = ${(project.lowestBounty + (project.highestBounty - project.lowestBounty) * prScore / 10).toFixed(4)}</div>
+                          </div>
+                        ) : null}
                       </div>
                     )}
                     {prClaimStatus && prClaimStatus.isClaimed && (

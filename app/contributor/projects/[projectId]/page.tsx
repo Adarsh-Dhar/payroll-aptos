@@ -124,8 +124,6 @@ export default async function ProjectPage({ params }: { params: { projectId: str
     <div className="min-h-dvh bg-background text-foreground">
       <AppHeader />
       <div className="mx-auto flex w-full max-w-7xl">
-        {/* Sidebar (desktop) */}
-        
         {/* Main */}
         <main className="flex-1 p-4 md:p-6">
           <div className="space-y-6">
