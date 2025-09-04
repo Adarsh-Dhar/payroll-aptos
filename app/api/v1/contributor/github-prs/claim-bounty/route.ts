@@ -276,6 +276,9 @@ export async function POST(request: NextRequest) {
       // where L = lowest bounty, D = difference between highest and lowest, score = 0-10 scale
       // The score is already on a 0-10 scale, so we divide by 10 to get the multiplier
       bountyAmount = lowestBounty + (difference * contributionScore / 10);
+      
+      // Round to 8 decimal places to avoid floating-point precision issues
+      bountyAmount = Math.round(bountyAmount * 100_000_000) / 100_000_000;
       console.log('=== BOUNTY CALCULATION ===');
       console.log(`PR Number: ${prNumber}`);
       console.log(`Repository: ${repository}`);
@@ -284,10 +287,10 @@ export async function POST(request: NextRequest) {
       console.log(`Contribution Score: ${contributionScore}/10`);
       console.log(`Difference (D): $${difference}`);
       console.log(`Bounty Formula: L + (D × score / 10) = ${lowestBounty} + (${difference} × ${contributionScore} / 10)`);
-      console.log(`Step by step: ${lowestBounty} + (${difference} × ${contributionScore} / 10) = ${lowestBounty} + (${(difference * contributionScore / 10).toFixed(4)}) = ${bountyAmount}`);
-      console.log(`Calculated Bounty: $${bountyAmount}`);
-      console.log(`Verification: If score is ${contributionScore}/10, multiplier is ${(contributionScore / 10).toFixed(3)}`);
-      console.log(`Verification: Difference × multiplier = ${difference} × ${(contributionScore / 10).toFixed(3)} = ${(difference * contributionScore / 10).toFixed(4)}`);
+      console.log(`Step by step: ${lowestBounty} + (${difference} × ${contributionScore} / 10) = ${lowestBounty} + (${(difference * contributionScore / 10).toFixed(8)}) = ${bountyAmount}`);
+      console.log(`Calculated Bounty: $${bountyAmount} (rounded to 8 decimal places)`);
+      console.log(`Verification: If score is ${contributionScore}/10, multiplier is ${(contributionScore / 10).toFixed(8)}`);
+      console.log(`Verification: Difference × multiplier = ${difference} × ${(contributionScore / 10).toFixed(8)} = ${(difference * contributionScore / 10).toFixed(8)}`);
       
       // Ensure minimum bounty amount (but allow exceeding maximum)
       if (bountyAmount < lowestBounty) {
@@ -387,7 +390,7 @@ export async function POST(request: NextRequest) {
           contributionScore,
           calculatedBounty: bountyAmount,
           formula: `L + (D × score / 10) = ${lowestBounty} + (${difference} × ${contributionScore} / 10) = ${bountyAmount}`,
-          stepByStep: `${lowestBounty} + (${difference} × ${contributionScore} / 10) = ${lowestBounty} + (${(difference * contributionScore / 10).toFixed(4)}) = ${bountyAmount}`
+          stepByStep: `${lowestBounty} + (${difference} × ${contributionScore} / 10) = ${lowestBounty} + (${(difference * contributionScore / 10).toFixed(8)}) = ${bountyAmount}`
         },
         prAnalysis: {
           finalScore: contributionScore,

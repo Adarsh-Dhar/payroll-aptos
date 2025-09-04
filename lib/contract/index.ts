@@ -825,7 +825,11 @@ export const projectEscrowUtils = {
    * @param apt - Amount in APT
    * @returns Amount in octas
    */
-  aptToOctas: (apt: number): number => apt * 100_000_000,
+  aptToOctas: (apt: number): number => {
+    // Round to 8 decimal places to avoid floating-point precision issues
+    const roundedApt = Math.round(apt * 100_000_000) / 100_000_000;
+    return Math.round(roundedApt * 100_000_000);
+  },
 
   /**
    * Convert octas to APT (1 APT = 100,000,000 octas)
