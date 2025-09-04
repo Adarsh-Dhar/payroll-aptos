@@ -5,13 +5,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { DollarSign, GitPullRequest, Users, FolderOpen, TrendingUp, Shield, Coins, Wallet, AlertCircle } from "lucide-react"
+import { Shield, Wallet } from "lucide-react"
 import { CreateProjectDialog } from "@/components/create-project-dialog"
 import { InitializeVaultButton } from "@/components/initialize-vault-button"
 import { projectEscrowClient, projectEscrowUtils } from "@/lib/contract"
 import { useEffect, useState } from "react"
 import { useSession, signIn } from "next-auth/react"
 import { Button } from "@/components/ui/button"
+import { useWallet } from "@aptos-labs/wallet-adapter-react"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Loader2 } from "lucide-react"
 
 // Define the data types based on our API response
 interface DashboardData {
@@ -84,6 +88,7 @@ interface ContractStatus {
 
 export default function Page() {
 	const { data: session, status } = useSession()
+	const { connected, account, signAndSubmitTransaction } = useWallet()
 	const [data, setData] = useState<DashboardData | null>(null)
 	const [contractData, setContractData] = useState<{
 		contractStatus: ContractStatus | null
@@ -91,6 +96,11 @@ export default function Page() {
 	} | null>(null)
 	const [loading, setLoading] = useState(true)
 	const [error, setError] = useState<string | null>(null)
+	const [fundOpen, setFundOpen] = useState(false)
+	const [fundProject, setFundProject] = useState<ProjectEscrowData | null>(null)
+	const [fundAmount, setFundAmount] = useState("")
+	const [funding, setFunding] = useState(false)
+	const [fundError, setFundError] = useState<string | null>(null)
 
 	// Get contract status and project escrow data
 	const getContractData = async (): Promise<{
@@ -103,12 +113,13 @@ export default function Page() {
 			const totalProjects = await projectEscrowClient.getTotalProjects()
 			const autoGenerator = await projectEscrowClient.getAutoProjectIdGenerator()
 			
+			const totalBalance = await projectEscrowClient.getTotalBalance()
 			const contractStatus: ContractStatus = {
-				isVaultInitialized: nextProjectId > 0, // If we can get next project ID, vault is initialized
+				isVaultInitialized: nextProjectId > 0,
 				isGeneratorInitialized: autoGenerator !== null,
 				nextProjectId: nextProjectId || 1,
 				totalProjects: totalProjects || 0,
-				totalBalance: 0 // TODO: Implement total balance calculation
+				totalBalance: totalBalance || 0
 			}
 
 			// Get project escrow data
@@ -150,10 +161,48 @@ export default function Page() {
 		}
 	}, [status])
 
+	async function handleFundSubmit(e: React.FormEvent<HTMLFormElement>) {
+		e.preventDefault()
+		if (!connected || !account || !signAndSubmitTransaction || !fundProject) {
+			setFundError("Connect your wallet")
+			return
+		}
+		const amountNum = Number(fundAmount)
+		if (!amountNum || amountNum <= 0) {
+			setFundError("Enter a valid APT amount")
+			return
+		}
+		setFundError(null)
+		setFunding(true)
+		try {
+			const res = await projectEscrowClient.fundProjectWithWallet(
+				account.address.toString(),
+				signAndSubmitTransaction,
+				fundProject.projectId,
+				amountNum
+			)
+			if (!res.success) {
+				throw new Error(res.error || "Funding failed")
+			}
+			const refreshed = await getContractData()
+			setContractData(refreshed)
+			setFundOpen(false)
+			setFundProject(null)
+			setFundAmount("")
+		} catch (err: any) {
+			setFundError(err?.message || "Failed to fund project")
+		} finally {
+			setFunding(false)
+		}
+	}
+
 	// Load contract data when authenticated
 	useEffect(() => {
 		if (status === "authenticated") {
-			getContractData().then(setContractData)
+			getContractData().then((res) => {
+				setContractData(res)
+				setLoading(false)
+			})
 		}
 	}, [status])
 
@@ -217,238 +266,113 @@ export default function Page() {
 							</div>
 
 
-							{/* Overview Cards */}
-							<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-								<Card>
-									<CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-										<CardTitle className="text-sm font-medium">Total Budget</CardTitle>
-										<DollarSign className="h-4 w-4 text-muted-foreground" />
-									</CardHeader>
-									<CardContent>
-										<div className="text-2xl font-bold">$24,000</div>
-										<p className="text-xs text-muted-foreground">
-											+20.1% from last month
-										</p>
-									</CardContent>
-								</Card>
-								<Card>
-									<CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-										<CardTitle className="text-sm font-medium">Total Spent</CardTitle>
-										<Coins className="h-4 w-4 text-muted-foreground" />
-									</CardHeader>
-									<CardContent>
-										<div className="text-2xl font-bold">$12,400</div>
-										<p className="text-xs text-muted-foreground">
-											+8.2% from last month
-										</p>
-									</CardContent>
-								</Card>
-								<Card>
-									<CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-										<CardTitle className="text-sm font-medium">Active Projects</CardTitle>
-										<FolderOpen className="h-4 w-4 text-muted-foreground" />
-									</CardHeader>
-									<CardContent>
-										<div className="text-2xl font-bold">12</div>
-										<p className="text-xs text-muted-foreground">
-											+2 new this month
-										</p>
-									</CardContent>
-								</Card>
-								<Card>
-									<CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-										<CardTitle className="text-sm font-medium">Total Developers</CardTitle>
-										<Users className="h-4 w-4 text-muted-foreground" />
-									</CardHeader>
-									<CardContent>
-										<div className="text-2xl font-bold">48</div>
-										<p className="text-xs text-muted-foreground">
-											+12 new this month
-										</p>
-									</CardContent>
-								</Card>
-							</div>
-
-							{/* PR Activity */}
-							<div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-								<Card className="col-span-4">
-									<CardHeader>
-										<CardTitle>Pull Request Activity</CardTitle>
-									</CardHeader>
-									<CardContent className="pl-2">
-										<div className="space-y-4">
-											<div className="flex items-center space-x-4">
-												<div className="space-y-2">
-													<p className="text-sm font-medium leading-none">Open PRs</p>
-													<p className="text-xs text-muted-foreground">
-														Currently open pull requests
-													</p>
-												</div>
-												<div className="ml-auto font-medium">23</div>
-											</div>
-											<div className="flex items-center space-x-4">
-												<div className="space-y-2">
-													<p className="text-sm font-medium leading-none">Merged PRs</p>
-													<p className="text-xs text-muted-foreground">
-														Successfully merged this month
-													</p>
-												</div>
-												<div className="ml-auto font-medium">18</div>
-											</div>
-											<div className="flex items-center space-x-4">
-												<div className="space-y-2">
-													<p className="text-sm font-medium leading-none">Average Score</p>
-													<p className="text-xs text-muted-foreground">
-														Quality score of submitted PRs
-													</p>
-												</div>
-												<div className="ml-auto font-medium">8.4/10</div>
-											</div>
-										</div>
-									</CardContent>
-								</Card>
-								<Card className="col-span-3">
-									<CardHeader>
-										<CardTitle>Recent Activity</CardTitle>
-									</CardHeader>
-									<CardContent>
-										<div className="space-y-4">
-											<div className="flex items-center space-x-4">
-												<GitPullRequest className="h-4 w-4 text-green-600" />
-												<div className="space-y-1">
-													<p className="text-sm font-medium leading-none">New PR #45</p>
-													<p className="text-xs text-muted-foreground">
-														Feature: Add user authentication
-													</p>
-												</div>
-											</div>
-											<div className="flex items-center space-x-4">
-												<DollarSign className="h-4 w-4 text-blue-600" />
-												<div className="space-y-1">
-													<p className="text-sm font-medium leading-none">Payout Sent</p>
-													<p className="text-xs text-muted-foreground">
-														$500 to @developer123
-													</p>
-												</div>
-											</div>
-											<div className="flex items-center space-x-4">
-												<Users className="h-4 w-4 text-purple-600" />
-												<div className="space-y-1">
-													<p className="text-sm font-medium leading-none">New Developer</p>
-													<p className="text-xs text-muted-foreground">
-														@newcoder joined project
-													</p>
-												</div>
-											</div>
-										</div>
-									</CardContent>
-								</Card>
-							</div>
-
-							{/* Project Performance */}
+							{/* Overview */}
 							<Card>
 								<CardHeader>
-									<CardTitle>Project Performance</CardTitle>
+									<div className="flex items-center justify-between">
+										<h2 className="text-lg font-semibold">Your Projects</h2>
+										<div className="text-sm text-muted-foreground">
+											{connected && account ? (
+												<span>Wallet: {account.address.toString().slice(0,6)}...{account.address.toString().slice(-4)}</span>
+											) : (
+												<span>Please connect your wallet to see your projects</span>
+											)}
+										</div>
+									</div>
 								</CardHeader>
 								<CardContent>
+									{connected && account ? (
+										<>
+											<div className="mb-4 text-sm text-muted-foreground">
+												{(() => {
+													const mine = (contractData?.projectEscrows || []).filter(p => p.owner.toLowerCase() === account.address.toString().toLowerCase())
+													const total = mine.reduce((s, p) => s + (p.balance || 0), 0)
+													return (
+														<div className="flex gap-6 flex-wrap">
+															<div>
+																<span className="font-medium">Projects:</span> {mine.length}
+															</div>
+															<div>
+																<span className="font-medium">Total Remaining:</span> {projectEscrowUtils.formatApt(total)}
+															</div>
+														</div>
+													)
+												})()}
+											</div>
+
 									<Table>
 										<TableHeader>
 											<TableRow>
-												<TableHead>Project</TableHead>
-												<TableHead>Budget</TableHead>
-												<TableHead>PRs</TableHead>
-												<TableHead>Merged</TableHead>
-												<TableHead>Utilization</TableHead>
+													<TableHead>ID</TableHead>
+													<TableHead>Name</TableHead>
+													<TableHead>Owner</TableHead>
+													<TableHead>Remaining</TableHead>
 												<TableHead>Status</TableHead>
+												<TableHead>Actions</TableHead>
 											</TableRow>
 										</TableHeader>
 										<TableBody>
-											<TableRow>
-												<TableCell className="font-medium">Web3 Dashboard</TableCell>
-												<TableCell>$5,000</TableCell>
-												<TableCell>8</TableCell>
-												<TableCell>6</TableCell>
+												{(contractData?.projectEscrows || [])
+													.filter(p => p.owner.toLowerCase() === account.address.toString().toLowerCase())
+													.map((p) => (
+														<TableRow key={p.projectId}>
+															<TableCell className="font-mono">{p.projectId}</TableCell>
+															<TableCell className="font-medium">{p.projectName}</TableCell>
+															<TableCell className="font-mono text-xs">{p.owner.slice(0,6)}...{p.owner.slice(-4)}</TableCell>
+															<TableCell>{projectEscrowUtils.formatApt(p.balance || 0)}</TableCell>
 												<TableCell>
-													<Progress value={75} className="w-[60px]" />
-													<span className="ml-2 text-sm">75%</span>
+																<span className="inline-flex items-center rounded-full bg-secondary px-2 py-0.5 text-xs">{p.status}</span>
 												</TableCell>
 												<TableCell>
-													<Badge variant="secondary">Active</Badge>
-												</TableCell>
+																<Button variant="secondary" size="sm" onClick={() => { setFundProject(p); setFundAmount(""); setFundOpen(true); }}>
+																	Add Funds
+																</Button>
+															</TableCell>
 											</TableRow>
+													))}
+												{(contractData?.projectEscrows || []).filter(p => p.owner.toLowerCase() === (account?.address?.toString() || '').toLowerCase()).length === 0 && (
 											<TableRow>
-												<TableCell className="font-medium">Mobile App</TableCell>
-												<TableCell>$3,000</TableCell>
-												<TableCell>5</TableCell>
-												<TableCell>3</TableCell>
-												<TableCell>
-													<Progress value={60} className="w-[60px]" />
-													<span className="ml-2 text-sm">60%</span>
-												</TableCell>
-												<TableCell>
-													<Badge variant="secondary">Active</Badge>
-												</TableCell>
+														<TableCell colSpan={5} className="text-center text-sm text-muted-foreground">No projects found for your wallet.</TableCell>
 											</TableRow>
-											<TableRow>
-												<TableCell className="font-medium">API Service</TableCell>
-												<TableCell>$2,500</TableCell>
-												<TableCell>3</TableCell>
-												<TableCell>2</TableCell>
-												<TableCell>
-													<Progress value={40} className="w-[60px]" />
-													<span className="ml-2 text-sm">40%</span>
-												</TableCell>
-												<TableCell>
-													<Badge variant="outline">Planning</Badge>
-												</TableCell>
-											</TableRow>
+												)}
 										</TableBody>
 									</Table>
+									</>
+									) : (
+										<div className="flex items-center justify-between">
+											<p className="text-sm">Connect your wallet to view and manage your on-chain projects.</p>
+											<div>
+												{/* Placeholder for wallet connect UI in header area */}
+												<Wallet className="h-5 w-5 text-muted-foreground" />
+											</div>
+										</div>
+									)}
 								</CardContent>
 							</Card>
 
-							{/* Top Developers */}
-							<Card>
-								<CardHeader>
-									<CardTitle>Top Performing Developers</CardTitle>
-								</CardHeader>
-								<CardContent>
-									<Table>
-										<TableHeader>
-											<TableRow>
-												<TableHead>Developer</TableHead>
-												<TableHead>Total PRs</TableHead>
-												<TableHead>Merged</TableHead>
-												<TableHead>Total Earnings</TableHead>
-												<TableHead>Avg Score</TableHead>
-											</TableRow>
-										</TableHeader>
-										<TableBody>
-											<TableRow>
-												<TableCell className="font-medium">@alice_dev</TableCell>
-												<TableCell>12</TableCell>
-												<TableCell>10</TableCell>
-												<TableCell>$2,400</TableCell>
-												<TableCell>9.2</TableCell>
-											</TableRow>
-											<TableRow>
-												<TableCell className="font-medium">@bob_coder</TableCell>
-												<TableCell>8</TableCell>
-												<TableCell>7</TableCell>
-												<TableCell>$1,800</TableCell>
-												<TableCell>8.8</TableCell>
-											</TableRow>
-											<TableRow>
-												<TableCell className="font-medium">@charlie_web</TableCell>
-												<TableCell>6</TableCell>
-												<TableCell>5</TableCell>
-												<TableCell>$1,200</TableCell>
-												<TableCell>8.5</TableCell>
-											</TableRow>
-										</TableBody>
-									</Table>
-								</CardContent>
-							</Card>
+							<Dialog open={fundOpen} onOpenChange={setFundOpen}>
+								<DialogContent className="sm:max-w-[420px]">
+									<DialogHeader>
+										<DialogTitle>Add Funds</DialogTitle>
+									</DialogHeader>
+									<form onSubmit={handleFundSubmit} className="space-y-4">
+										<div className="text-sm text-muted-foreground">
+											Project ID: <span className="font-mono">{fundProject?.projectId}</span>
+										</div>
+										<div className="grid gap-2">
+											<label className="text-sm font-medium">Amount (APT)</label>
+											<Input type="number" min="0.00000001" step="0.00000001" placeholder="1.0" value={fundAmount} onChange={(e) => setFundAmount(e.target.value)} required />
+											{fundError && (<div className="text-xs text-red-600">{fundError}</div>)}
+										</div>
+										<DialogFooter>
+											<Button type="button" variant="secondary" onClick={() => setFundOpen(false)} disabled={funding}>Cancel</Button>
+											<Button type="submit" disabled={funding || !connected || !account}>
+												{funding ? (<span className="inline-flex items-center"><Loader2 className="h-4 w-4 mr-2 animate-spin"/>Funding…</span>) : ("Add Funds")}
+											</Button>
+										</DialogFooter>
+									</form>
+								</DialogContent>
+							</Dialog>
 						</div>
 					</main>
 				</div>

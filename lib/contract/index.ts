@@ -229,7 +229,7 @@ export class ProjectEscrowContractClient {
     const payload: InputGenerateTransactionPayloadData = {
       function: `${this.contractAddress}::${this.contractModule}::withdraw_from_project`,
       typeArguments: [],
-      functionArguments: [projectId.toString(), 0.01.toString()]
+      functionArguments: [projectId.toString(), amount.toString()]
     };
 
     const transaction = await this.aptos.transaction.build.simple({
