@@ -43,6 +43,7 @@ interface ClaimFormData {
   prUrl: string
   description: string
   amount: string
+  githubToken: string
 }
 
 interface PRValidation {
@@ -93,7 +94,8 @@ export default function ClaimPage() {
     prNumber: "",
     prUrl: "",
     description: "",
-    amount: ""
+    amount: "",
+    githubToken: ""
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
@@ -210,7 +212,12 @@ export default function ClaimPage() {
         const claimRes = await fetch(`${baseUrl}/api/v1/contributor/github-prs/claim-bounty`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prNumber, repository, projectId: project.id })
+          body: JSON.stringify({ 
+            prNumber, 
+            repository, 
+            projectId: project.id,
+            githubToken: formData.githubToken
+          })
         })
         const claimJson = await claimRes.json()
         console.log('Claim API response:', claimJson)
@@ -502,7 +509,10 @@ export default function ClaimPage() {
                       type="password"
                       placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
                       value={githubToken}
-                      onChange={(e) => setGithubToken(e.target.value)}
+                      onChange={(e) => {
+                        setGithubToken(e.target.value)
+                        setFormData(prev => ({ ...prev, githubToken: e.target.value }))
+                      }}
                       required
                     />
                     <p className="text-xs text-muted-foreground">

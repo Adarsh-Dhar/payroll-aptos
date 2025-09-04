@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    const { prNumber, repository, additions, deletions, hasTests, description, commits, bountyAmount: providedBountyAmount, projectId } = body;
+    const { prNumber, repository, additions, deletions, hasTests, description, commits, bountyAmount: providedBountyAmount, projectId, githubToken } = body;
     
     console.log('Parsed claim request data:', {
       prNumber,
@@ -179,7 +179,7 @@ export async function POST(request: NextRequest) {
             owner: repoOwner,
             repo: repoName,
             prNumber: prNumber,
-            githubToken: process.env.GITHUB_TOKEN || process.env.GITHUB_ACCESS_TOKEN || 'mock-token'
+            githubToken: githubToken || process.env.GITHUB_TOKEN || process.env.GITHUB_ACCESS_TOKEN || 'mock-token'
           })
         }
       );
