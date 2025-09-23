@@ -15,7 +15,8 @@ import { Label } from "@/components/ui/label"
 import { useWallet } from "@aptos-labs/wallet-adapter-react"
 import { projectEscrowClient, projectEscrowUtils } from "@/lib/contract"
 import { toast } from "sonner"
-import { Loader2, Wallet } from "lucide-react"
+import { Loader2, Wallet, LogIn } from "lucide-react"
+import { useSession, signIn } from "next-auth/react"
 
 type CreateProjectFormState = {
 	name: string
@@ -41,12 +42,23 @@ export function CreateProjectDialog() {
 	})
 
 	const { connected, account, signAndSubmitTransaction } = useWallet()
+	const { data: session, status } = useSession()
 
 	async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
 		e.preventDefault()
 		
 		if (!connected || !account) {
 			toast.error("Please connect your wallet first")
+			return
+		}
+
+		if (status === "loading") {
+			toast.error("Please wait while we check your authentication status")
+			return
+		}
+
+		if (!session) {
+			toast.error("Please sign in with GitHub to create a project")
 			return
 		}
 
@@ -83,7 +95,10 @@ export function CreateProjectDialog() {
 			toast.info("Creating project in database...")
 			const res = await fetch("/api/v1/projects", {
 				method: "POST",
-				headers: { "Content-Type": "application/json" },
+				headers: { 
+					"Content-Type": "application/json",
+					"Cookie": document.cookie // Include session cookie for authentication
+				},
 				body: JSON.stringify(payload),
 			})
 			
@@ -103,9 +118,18 @@ export function CreateProjectDialog() {
 					fundingAmount: "" 
 				})
 			} else {
-				// If database creation fails, we should ideally handle the blockchain escrow
-				// For now, we'll just show an error and let the user know
-				throw new Error(data.message || "Failed to create project in database. Blockchain escrow was created successfully.")
+				// Handle specific error cases
+				if (res.status === 401) {
+					throw new Error("Authentication failed. Please sign in again.")
+				} else if (res.status === 403) {
+					throw new Error("You don't have permission to create projects.")
+				} else if (res.status === 400) {
+					throw new Error(data.message || "Invalid project data. Please check your inputs.")
+				} else {
+					// If database creation fails, we should ideally handle the blockchain escrow
+					// For now, we'll just show an error and let the user know
+					throw new Error(data.message || "Failed to create project in database. Blockchain escrow was created successfully.")
+				}
 			}
 		} catch (err) {
 			console.error("Create project error:", err)
@@ -115,7 +139,7 @@ export function CreateProjectDialog() {
 		}
 	}
 
-	if (!connected) {
+	if (status === "loading") {
 		return (
 			<Dialog open={open} onOpenChange={setOpen}>
 				<DialogTrigger asChild>
@@ -123,17 +147,59 @@ export function CreateProjectDialog() {
 				</DialogTrigger>
 				<DialogContent className="sm:max-w-[520px]">
 					<DialogHeader>
-						<DialogTitle>Wallet Required</DialogTitle>
+						<DialogTitle>Loading...</DialogTitle>
 					</DialogHeader>
 					<div className="flex flex-col items-center justify-center py-8 space-y-4">
-						<Wallet className="h-12 w-12 text-muted-foreground" />
+						<Loader2 className="h-12 w-12 text-muted-foreground animate-spin" />
 						<div className="text-center">
-							<h3 className="text-lg font-medium mb-2">Connect Your Wallet</h3>
+							<h3 className="text-lg font-medium mb-2">Checking Authentication</h3>
 							<p className="text-muted-foreground">
-								You need to connect your wallet to create a project and fund the escrow.
+								Please wait while we verify your authentication status.
 							</p>
 						</div>
-						<Button onClick={() => setOpen(false)}>
+					</div>
+				</DialogContent>
+			</Dialog>
+		)
+	}
+
+	if (!connected || !session) {
+		return (
+			<Dialog open={open} onOpenChange={setOpen}>
+				<DialogTrigger asChild>
+					<Button size="sm" className="h-9">Create Project</Button>
+				</DialogTrigger>
+				<DialogContent className="sm:max-w-[520px]">
+					<DialogHeader>
+						<DialogTitle>Authentication Required</DialogTitle>
+					</DialogHeader>
+					<div className="flex flex-col items-center justify-center py-8 space-y-4">
+						{!connected ? (
+							<>
+								<Wallet className="h-12 w-12 text-muted-foreground" />
+								<div className="text-center">
+									<h3 className="text-lg font-medium mb-2">Connect Your Wallet</h3>
+									<p className="text-muted-foreground">
+										You need to connect your wallet to create a project and fund the escrow.
+									</p>
+								</div>
+							</>
+						) : (
+							<>
+								<LogIn className="h-12 w-12 text-muted-foreground" />
+								<div className="text-center">
+									<h3 className="text-lg font-medium mb-2">Sign In Required</h3>
+									<p className="text-muted-foreground">
+										You need to sign in with GitHub to create a project.
+									</p>
+								</div>
+								<Button onClick={() => signIn("github")} className="w-full">
+									<LogIn className="mr-2 h-4 w-4" />
+									Sign in with GitHub
+								</Button>
+							</>
+						)}
+						<Button variant="outline" onClick={() => setOpen(false)}>
 							Close
 						</Button>
 					</div>
@@ -152,13 +218,20 @@ export function CreateProjectDialog() {
 					<DialogTitle>Create a new project</DialogTitle>
 				</DialogHeader>
 				<form onSubmit={handleSubmit} className="space-y-4">
-					{/* Wallet Info */}
-					<div className="p-3 bg-muted/50 rounded-lg">
+					{/* Wallet and Auth Info */}
+					<div className="p-3 bg-muted/50 rounded-lg space-y-2">
 						<div className="flex items-center gap-2 text-sm">
 							<Wallet className="h-4 w-4 text-green-600" />
-							<span className="text-muted-foreground">Connected:</span>
+							<span className="text-muted-foreground">Wallet:</span>
 							<span className="font-mono text-xs">
 								{account?.address.toString().slice(0, 6)}...{account?.address.toString().slice(-4)}
+							</span>
+						</div>
+						<div className="flex items-center gap-2 text-sm">
+							<LogIn className="h-4 w-4 text-green-600" />
+							<span className="text-muted-foreground">Signed in as:</span>
+							<span className="font-mono text-xs">
+								{(session?.user as any)?.githubUsername || session?.user?.name}
 							</span>
 						</div>
 					</div>

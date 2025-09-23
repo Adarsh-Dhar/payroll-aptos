@@ -19,6 +19,7 @@ const createProjectSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
   repoUrl: z.string().url(),
+  initialFunding: z.number().optional(), // Add initialFunding field
   lowestBounty: z.number().positive(),
   highestBounty: z.number().positive(),
   adminId: z.number().int().positive(),
