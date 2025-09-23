@@ -132,18 +132,56 @@ export async function POST(request: NextRequest) {
         console.log('⚠️ Project not found in database, creating new one...');
         
         // Create new project record
-        const newProject = await prisma.project.create({
-          data: {
-            name: repository,
-            description: `Auto-created project for repository ${repository}`,
-            repoUrl: `https://github.com/${repository}`,
-            initialFunding: 100, // Default initial funding
-            lowestBounty: 0.01, // Default lowest bounty
-            highestBounty: 0.10, // Default highest bounty
-            adminId: 1, // Default admin ID
-            updatedAt: new Date(),
-          } as any
-        });
+        let newProject;
+        try {
+          newProject = await prisma.project.create({
+            data: {
+              name: repository,
+              description: `Auto-created project for repository ${repository}`,
+              repoUrl: `https://github.com/${repository}`,
+              lowestBounty: 0.01,
+              highestBounty: 0.10,
+              adminId: 1,
+              updatedAt: new Date(),
+            } as any
+          });
+        } catch (e: any) {
+          const message = e?.message || '';
+          if (message.includes('budget')) {
+            const now = new Date();
+            const insertSql = `
+              INSERT INTO "Project" (
+                "name", "description", "repoUrl", "adminId",
+                "createdAt", "isActive", "maxContributors", "tags",
+                "highestBounty", "lowestBounty", "updatedAt", "budget"
+              ) VALUES (
+                $1, $2, $3, $4,
+                $5, $6, $7, $8,
+                $9, $10, $11, $12
+              ) RETURNING *
+            `;
+            const params = [
+              repository,
+              `Auto-created project for repository ${repository}`,
+              `https://github.com/${repository}`,
+              1,
+              now,
+              true,
+              null,
+              [],
+              0.10,
+              0.01,
+              now,
+              0.10
+            ];
+            const rows = await prisma.$queryRawUnsafe<any[]>(insertSql, ...params);
+            const inserted = rows && rows[0];
+            if (!inserted) throw e;
+            newProject = inserted;
+          } else {
+            throw e;
+          }
+        }
         
         project = newProject;
         console.log('✅ New project created:', project);

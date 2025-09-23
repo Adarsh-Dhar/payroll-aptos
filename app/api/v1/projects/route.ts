@@ -19,7 +19,8 @@ const createProjectSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
   repoUrl: z.string().url(),
-  initialFunding: z.number().optional(), // Add initialFunding field
+  // Accept but don't persist initialFunding; it's not a DB column
+  initialFunding: z.number().optional(),
   lowestBounty: z.number().positive(),
   highestBounty: z.number().positive(),
   adminId: z.number().int().positive(),
@@ -188,21 +189,78 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const newProject = await prisma.project.create({
-      data: {
-        ...projectData,
-        updatedAt: new Date(),
-      } as any, // Use type assertion to bypass the type mismatch
-      include: {
-        Admin: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
+    // Strip non-persisted fields before writing to DB
+    const { initialFunding, ...projectCreateData } = projectData as any;
+
+    let newProject;
+    try {
+      newProject = await prisma.project.create({
+        data: {
+          ...projectCreateData,
+          updatedAt: new Date(),
+        } as any,
+        include: {
+          Admin: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            }
           }
         }
+      });
+    } catch (e: any) {
+      const message = e?.message || '';
+      // Fallback for legacy DBs that still have a NOT NULL budget column
+      if (message.includes('budget')) {
+        const now = new Date();
+        const params = [
+          projectCreateData.name,
+          projectCreateData.description ?? null,
+          projectCreateData.repoUrl,
+          projectCreateData.adminId,
+          now,
+          projectCreateData.isActive ?? true,
+          projectCreateData.maxContributors ?? null,
+          projectCreateData.tags ?? [],
+          projectCreateData.highestBounty,
+          projectCreateData.lowestBounty,
+          now,
+          // Provide a sensible default budget (use highestBounty as starter)
+          projectCreateData.highestBounty || 0
+        ];
+
+        // Attempt raw insert including budget column; works even if Prisma schema is behind DB
+        const insertSql = `
+          INSERT INTO "Project" (
+            "name", "description", "repoUrl", "adminId",
+            "createdAt", "isActive", "maxContributors", "tags",
+            "highestBounty", "lowestBounty", "updatedAt", "budget"
+          ) VALUES (
+            $1, $2, $3, $4,
+            $5, $6, $7, $8,
+            $9, $10, $11, $12
+          ) RETURNING *
+        `;
+
+        const rows = await prisma.$queryRawUnsafe<any[]>(insertSql, ...params);
+        const inserted = rows && rows[0];
+        if (!inserted) throw e;
+
+        // Hydrate Admin selection to match include
+        const withAdmin = await prisma.project.findUnique({
+          where: { id: inserted.id },
+          include: {
+            Admin: {
+              select: { id: true, name: true, email: true }
+            }
+          }
+        });
+        newProject = withAdmin || inserted;
+      } else {
+        throw e;
       }
-    });
+    }
 
     return NextResponse.json({
       success: true,
