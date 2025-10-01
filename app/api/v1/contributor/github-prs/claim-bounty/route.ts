@@ -228,6 +228,12 @@ export async function POST(request: NextRequest) {
           reasoning = normalized.reasoning || '';
           keyInsights = normalized.key_insights;
           
+          console.log('=== SCORE EXTRACTION DEBUG ===');
+          console.log('Raw LLM analysis:', JSON.stringify(a, null, 2));
+          console.log('Normalized analysis:', JSON.stringify(normalized, null, 2));
+          console.log('Extracted contributionScore:', contributionScore);
+          console.log('Type of contributionScore:', typeof contributionScore);
+          
           console.log('✅ Contribution score from GitHub API:', contributionScore);
           console.log('📊 Category:', category);
           console.log('📈 Metric scores:', metricScores);
@@ -244,15 +250,20 @@ export async function POST(request: NextRequest) {
       console.log('⚠️ Using fallback contribution score');
     }
     
-    // Require successful API response
+    // Check if this is spam (0 score)
     if (contributionScore === 0) {
-      console.error('GitHub contribution API failed and no fallback available');
+      console.error('PR is classified as spam - cannot claim bounty');
       return NextResponse.json(
         { 
           success: false, 
-          message: 'Failed to analyze PR contribution. Please ensure the GitHub contribution API is working properly.' 
+          message: 'This PR is classified as spam and cannot be claimed',
+          details: {
+            reason: 'Empty or worthless PR with no meaningful changes',
+            score: 0,
+            message: 'Spam PRs are not eligible for bounty claims'
+          }
         },
-        { status: 500 }
+        { status: 400 }
       );
     }
     

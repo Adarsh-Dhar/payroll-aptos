@@ -107,6 +107,10 @@ export default function ClaimRewardDialog({ isOpen, onClose, onBountyClaimed, pr
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
+        // Check if this is a spam PR error
+        if (errorData.details && errorData.details.reason === 'Empty or worthless PR with no meaningful changes') {
+          throw new Error(`🚫 SPAM DETECTED: ${errorData.details.message}`)
+        }
         throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`)
       }
 
@@ -217,6 +221,10 @@ export default function ClaimRewardDialog({ isOpen, onClose, onBountyClaimed, pr
 
       if (!claimResponse.ok) {
         const errorData = await claimResponse.json().catch(() => ({}))
+        // Check if this is a spam PR error
+        if (errorData.details && errorData.details.reason === 'Empty or worthless PR with no meaningful changes') {
+          throw new Error(`🚫 SPAM DETECTED: ${errorData.details.message}`)
+        }
         throw new Error(errorData.message || `HTTP ${claimResponse.status}: ${claimResponse.statusText}`)
       }
 

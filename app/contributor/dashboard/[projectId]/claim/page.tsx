@@ -201,6 +201,11 @@ export default function ClaimPage() {
 
       const data = await res.json()
       if (!res.ok || !data.success) {
+        // Check if this is a spam PR error
+        if (data.details && data.details.reason === 'Empty or worthless PR with no meaningful changes') {
+          setValidationError(`🚫 SPAM DETECTED: ${data.details.message}`)
+          return
+        }
         throw new Error(data.error || data.message || 'Validation failed')
       }
       setPrValidation(data)

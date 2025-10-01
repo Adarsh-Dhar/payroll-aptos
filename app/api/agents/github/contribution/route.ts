@@ -422,7 +422,7 @@ export async function POST(req: NextRequest) {
     let analysis: PRAnalysis;
     try {
       const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' });
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
       const llmInput = {
         pr_data: {
           github: prAnalysisData,
@@ -448,6 +448,13 @@ export async function POST(req: NextRequest) {
       }
       
       const parsed = JSON.parse(jsonMatch[0]);
+      
+      console.log('=== LLM RESPONSE DEBUG ===');
+      console.log('Raw LLM response text:', text);
+      console.log('Parsed LLM response:', JSON.stringify(parsed, null, 2));
+      console.log('Final score from LLM:', parsed.final_score);
+      console.log('Category from LLM:', parsed.category);
+      console.log('Tone from LLM:', parsed.honest_review?.tone);
       
       // Validate required fields
       if (!parsed || typeof parsed !== 'object' || !parsed.metric_scores || typeof parsed.final_score !== 'number' || !parsed.category) {
@@ -487,6 +494,11 @@ export async function POST(req: NextRequest) {
           tone: parsed.honest_review.tone || 'neutral',
         } : undefined
       };
+      
+      console.log('=== FINAL ANALYSIS DEBUG ===');
+      console.log('Final analysis object:', JSON.stringify(analysis, null, 2));
+      console.log('Final score in analysis:', analysis.final_score);
+      console.log('Category in analysis:', analysis.category);
     } catch (error) {
       console.error('LLM analysis failed:', error);
       return NextResponse.json(

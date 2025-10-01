@@ -190,6 +190,21 @@ export async function POST(req: NextRequest) {
     const scoringResult = await scoringResponse.json();
     console.log('PR scoring result:', scoringResult);
 
+    // Check if this is spam (0 score)
+    if (scoringResult.analysis && scoringResult.analysis.final_score === 0) {
+      return NextResponse.json(
+        { 
+          error: 'This PR is classified as spam and cannot be claimed',
+          details: {
+            reason: 'Empty or worthless PR with no meaningful changes',
+            score: 0,
+            message: 'Spam PRs are not eligible for bounty claims'
+          }
+        },
+        { status: 400 }
+      );
+    }
+
     // Normalize analysis if using LLM schema
     let normalizedAnalysis = scoringResult.analysis;
     if (normalizedAnalysis && normalizedAnalysis.metric_scores && normalizedAnalysis.metric_scores.execution) {

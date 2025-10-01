@@ -322,7 +322,7 @@ export async function POST(request: NextRequest) {
             hasTests: false,
             linkedIssue: prUrl,
             merged: true,
-            score: 8.0,
+            score: 0, // Will be updated with actual PR analysis score
             amountPaid: Number(bountyAmount),
             developerId: developerId,
             projectId: parsedProjectId,
