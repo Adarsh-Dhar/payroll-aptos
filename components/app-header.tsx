@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
@@ -41,10 +42,15 @@ export function AppHeader() {
           </Sheet>
 
           <Link href="/dashboard" className="flex items-center gap-2" aria-label="DevPayStream Home">
-            <div className="grid h-8 w-8 place-items-center rounded-md bg-indigo-600 text-white ring-1 ring-indigo-500/30 shadow-sm">
-              <span className="text-xs font-semibold">DP</span>
-            </div>
-            <span className="text-balance text-sm font-semibold md:text-base">DevPayStream</span>
+            <Image
+              src="/logo.png"
+              alt="DevPayStream logo"
+              width={64}
+              height={64}
+              className="h-16 w-16 rounded-md shadow-sm"
+              priority
+            />
+            <span className="text-balance text-sm font-semibold md:text-base">Gig-Fi</span>
           </Link>
         </div>
 
