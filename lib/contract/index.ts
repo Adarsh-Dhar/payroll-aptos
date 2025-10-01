@@ -32,13 +32,6 @@ const config = new AptosConfig({
 });
 const aptos = new Aptos(config);
 
-  contractAddress: CONTRACT_ADDRESS,
-  contractModule: CONTRACT_MODULE,
-  fullnodeUrl: "https://fullnode.testnet.aptoslabs.com/v1",
-  configNetwork: config.network,
-  configFullnode: config.fullnode
-});
-
 // Types matching the Move contract
 export interface ProjectEscrow {
   balance: number;
@@ -538,10 +531,8 @@ export class ProjectEscrowContractClient {
     amountInApt: number
   ): Promise<{ success: boolean; transactionHash?: string; error?: string }> {
     try {
-        amountInApt,
-        contractAddress: this.contractAddress,
-        contractModule: this.contractModule
-      });
+      // Convert APT to octas
+      const amountInOctas = projectEscrowUtils.aptToOctas(amountInApt);
 
       // Check if escrow vault is initialized
       const isVaultInitialized = await this.isEscrowVaultInitialized();
@@ -562,10 +553,6 @@ export class ProjectEscrowContractClient {
           error: 'Auto project ID generator not initialized' 
         };
       }
-
-      // Convert APT to octas
-      const amountInOctas = projectEscrowUtils.aptToOctas(amountInApt);
-      
 
       // Create the transaction data in the format expected by wallet adapter
       const transactionData = {
@@ -855,6 +842,9 @@ export const projectEscrowUtils = {
 
 // Export the main client instance
 export const projectEscrowClient = new ProjectEscrowContractClient();
+
+// Also export as contractClient for backward compatibility
+export const contractClient = new ProjectEscrowContractClient();
 
 // Re-export hooks for project escrow contract
 export * from './useVault';

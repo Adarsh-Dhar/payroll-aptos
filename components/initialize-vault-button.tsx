@@ -126,22 +126,7 @@ export function InitializeVaultButton({
                 <Wallet className="mr-2 h-4 w-4" />
                 Connect Wallet
               </Button>
-            ) : (
-              <Button
-                onClick={handleInitialize}
-                disabled={isInitializing || success}
-                className="bg-amber-600 hover:bg-amber-700 dark:bg-amber-500 dark:hover:bg-amber-600"
-              >
-                {isInitializing ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Initializing...
-                  </>
-                ) : (
-                  "Initialize Contract"
-                )}
-              </Button>
-            )}
+            ) : null}
           </div>
         </div>
         
