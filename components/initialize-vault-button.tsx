@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { AlertCircle, CheckCircle, Loader2, Wallet } from "lucide-react"
@@ -94,6 +94,20 @@ export function InitializeVaultButton({
     }
   }
 
+  // On mount: if not initialized, attempt initialization (requires connected wallet)
+  useEffect(() => {
+    if (!isVaultInitialized || !isGeneratorInitialized) {
+      // Only attempt if wallet API is available in browser
+      if (typeof window !== 'undefined' && window.aptos) {
+        // Fire and forget; handleInitialize has its own guards/toasts
+        void handleInitialize()
+      }
+    }
+    // We intentionally exclude handleInitialize from deps to avoid re-creating
+    // and re-triggering the effect; it doesn't rely on changing refs
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isVaultInitialized, isGeneratorInitialized])
+
   const handleConnectWallet = () => {
     if (typeof window !== 'undefined' && window.aptos) {
       window.aptos.connect()
@@ -107,35 +121,6 @@ export function InitializeVaultButton({
   }
 
   return (
-    <Card className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/20">
-      <CardContent className="pt-6">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            {success && (
-              <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
-                <CheckCircle className="h-4 w-4" />
-                <span className="text-sm font-medium">Initialized</span>
-              </div>
-            )}
-            
-            {showWalletConnect ? (
-              <Button
-                onClick={handleConnectWallet}
-                className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600"
-              >
-                <Wallet className="mr-2 h-4 w-4" />
-                Connect Wallet
-              </Button>
-            ) : null}
-          </div>
-        </div>
-        
-        {error && (
-          <div className="mt-3 text-sm text-red-600 dark:text-red-400">
-            Error: {error}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+   <></>
   )
 }

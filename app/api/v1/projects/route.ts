@@ -27,6 +27,7 @@ const createProjectSchema = z.object({
   isActive: z.boolean().default(true),
   maxContributors: z.number().int().positive().optional(),
   tags: z.array(z.string()).default([]),
+  budget: z.number().nonnegative().optional(),
 });
 
 const querySchema = z.object({
@@ -187,6 +188,9 @@ export async function POST(request: NextRequest) {
 
     // Strip non-persisted fields before writing to DB
     const { initialFunding, ...projectCreateData } = projectData as any;
+    if (projectCreateData.budget == null) {
+      projectCreateData.budget = projectCreateData.highestBounty;
+    }
 
     let newProject;
     try {
@@ -206,9 +210,61 @@ export async function POST(request: NextRequest) {
         }
       });
     } catch (e: any) {
-      const message = e?.message || '';
-      // Fallback for legacy DBs that still have a NOT NULL budget column
-      if (message.includes('budget')) {
+      const message: string = e?.message || '';
+      const normalized = message.toLowerCase();
+      // If Prisma validation claims a required `budget` field, bypass client validation and insert without budget
+      if (normalized.includes('prismaclientvalidationerror') && normalized.includes('budget')) {
+        const now = new Date();
+        const paramsNoBudget = [
+          projectCreateData.name,
+          projectCreateData.description ?? null,
+          projectCreateData.repoUrl,
+          projectCreateData.adminId,
+          now,
+          projectCreateData.isActive ?? true,
+          projectCreateData.maxContributors ?? null,
+          projectCreateData.tags ?? [],
+          projectCreateData.highestBounty,
+          projectCreateData.lowestBounty,
+          now,
+        ];
+        const insertSqlNoBudget = `
+          INSERT INTO "Project" (
+            "name", "description", "repoUrl", "adminId",
+            "createdAt", "isActive", "maxContributors", "tags",
+            "highestBounty", "lowestBounty", "updatedAt"
+          ) VALUES (
+            $1, $2, $3, $4,
+            $5, $6, $7, $8,
+            $9, $10, $11
+          ) RETURNING *
+        `;
+        try {
+          const rowsNoBudget = await prisma.$queryRawUnsafe<any[]>(insertSqlNoBudget, ...paramsNoBudget);
+          const insertedNoBudget = rowsNoBudget && rowsNoBudget[0];
+          if (insertedNoBudget) {
+            const withAdminNoBudget = await prisma.project.findUnique({
+              where: { id: insertedNoBudget.id },
+              include: {
+                Admin: { select: { id: true, name: true, email: true } }
+              }
+            });
+            newProject = withAdminNoBudget || insertedNoBudget;
+            return NextResponse.json({
+              success: true,
+              data: newProject,
+              message: 'Project created successfully'
+            }, { status: 201 });
+          }
+        } catch (rawErr: any) {
+          // If raw insert without budget fails due to NOT NULL on budget, fall through to budget-including path below
+        }
+      }
+      // Fallback only when DB has a NOT NULL violation on existing budget column
+      const isNotNullViolation = normalized.includes('violates not-null constraint') || normalized.includes('null value in column "budget"');
+      const mentionsBudget = normalized.includes('budget');
+      const columnMissing = normalized.includes('does not exist');
+      if (isNotNullViolation && mentionsBudget && !columnMissing) {
         const now = new Date();
         const params = [
           projectCreateData.name,

@@ -60,6 +60,7 @@ model Project {
   tags            String[]      @default([])
   highestBounty   Float
   lowestBounty    Float
+  budget          Float         @default(0)
   Payout          Payout[]
   Admin           Admin         @relation(fields: [adminId], references: [id])
   PullRequest     PullRequest[]

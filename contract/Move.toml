@@ -4,8 +4,8 @@ version = "1.0.0"
 authors = []
 
 [addresses]
-fund_withdraw = "0x4c21a4998d0673a4b9400bf5610a7189c36409f469d56b54fae2a81616ac0421"
-fund_withdraw_v2 = "0x4c21a4998d0673a4b9400bf5610a7189c36409f469d56b54fae2a81616ac0421"
+fund_withdraw = "0x215ede66d2cf89d0e9544af066a15c1ce22c5b6fc14773f10eb4551fa35e6c8a"
+fund_withdraw_v2 = "0x215ede66d2cf89d0e9544af066a15c1ce22c5b6fc14773f10eb4551fa35e6c8a"
 
 [dependencies.AptosFramework]
 git = "https://github.com/aptos-labs/aptos-framework.git"

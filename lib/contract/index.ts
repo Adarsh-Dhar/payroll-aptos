@@ -18,7 +18,8 @@ import dotenv from "dotenv";
 dotenv.config();
 
 // Contract configuration
-const CONTRACT_ADDRESS = "0x4c21a4998d0673a4b9400bf5610a7189c36409f469d56b54fae2a81616ac0421"; // Deployed contract address on testnet
+const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_APTOS_CONTRACT_ADDRESS
+  || "0x215ede66d2cf89d0e9544af066a15c1ce22c5b6fc14773f10eb4551fa35e6c8a"; // Deployed contract address on testnet (default)
 const CONTRACT_MODULE = "project_escrow_v3";
 
 // Explicitly set to TESTNET to match where the contract is deployed
@@ -103,6 +104,34 @@ export class ProjectEscrowContractClient {
     return await this.aptos.waitForTransaction({
       transactionHash: pendingTxn.hash,
     });
+  }
+
+  /**
+   * Initialize the escrow vault using a wallet adapter (no Account object required)
+   * @param accountAddress - The account address (unused by Move entry but kept for symmetry)
+   * @param signAndSubmitTransaction - The wallet adapter's signAndSubmitTransaction function
+   */
+  async initializeWithWallet(
+    accountAddress: string,
+    signAndSubmitTransaction: (transaction: any) => Promise<any>
+  ): Promise<TransactionResponse> {
+    const transactionData = {
+      data: {
+        function: `${this.contractAddress}::${this.contractModule}::initialize`,
+        typeArguments: [],
+        functionArguments: []
+      },
+      options: {
+        maxGasAmount: "200000",
+        gasUnitPrice: "100"
+      }
+    };
+
+    const pendingTxn = await signAndSubmitTransaction(transactionData);
+    const result = await this.aptos.waitForTransaction({
+      transactionHash: pendingTxn.hash,
+    });
+    return result;
   }
 
   /**
@@ -534,24 +563,35 @@ export class ProjectEscrowContractClient {
       // Convert APT to octas
       const amountInOctas = projectEscrowUtils.aptToOctas(amountInApt);
 
-      // Check if escrow vault is initialized
-      const isVaultInitialized = await this.isEscrowVaultInitialized();
-      
-      if (!isVaultInitialized) {
-        return { 
-          success: false, 
-          error: 'Escrow vault not initialized' 
-        };
+      // Ensure initialization; if missing, request server to initialize with deployer key
+      let isVaultInitialized = await this.isEscrowVaultInitialized();
+      let isGeneratorInitialized = await this.isAutoProjectIdGeneratorInitialized();
+
+      if (!isVaultInitialized || !isGeneratorInitialized) {
+        try {
+          const resp = await fetch('/api/v1/contract/initialize', { method: 'POST' });
+          if (!resp.ok) {
+            const data = await resp.json().catch(() => ({}));
+            console.warn('Server initialize failed', data);
+          } else {
+            const data = await resp.json().catch(() => ({}));
+            if (!data?.initialized) {
+              console.warn('Server initialize did not complete', data);
+            }
+          }
+        } catch (_) {
+          // ignore fetch errors, we'll rely on re-check
+        }
+        // Re-check after initialization
+        isVaultInitialized = await this.isEscrowVaultInitialized();
+        isGeneratorInitialized = await this.isAutoProjectIdGeneratorInitialized();
       }
 
-      // Check if auto project ID generator is initialized
-      const isGeneratorInitialized = await this.isAutoProjectIdGeneratorInitialized();
-      
-      if (!isGeneratorInitialized) {
-        return { 
-          success: false, 
-          error: 'Auto project ID generator not initialized' 
-        };
+      if (!isVaultInitialized || !isGeneratorInitialized) {
+        const reason = !isVaultInitialized
+          ? 'Escrow vault not initialized'
+          : 'Auto project ID generator not initialized';
+        return { success: false, error: `${reason}. Server initializer may be misconfigured.` };
       }
 
       // Create the transaction data in the format expected by wallet adapter
@@ -562,8 +602,8 @@ export class ProjectEscrowContractClient {
           functionArguments: [amountInOctas.toString()]
         },
         options: {
-          maxGasAmount: "2000",  // Extremely low gas limit for affordability
-          gasUnitPrice: "100"    // Minimum gas price for Testnet
+          maxGasAmount: "200000",
+          gasUnitPrice: "100"
         }
       };
 
@@ -627,8 +667,8 @@ export class ProjectEscrowContractClient {
           functionArguments: [projectId.toString(), amountInOctas.toString()]
         },
         options: {
-          maxGasAmount: "2000",  // Extremely low gas limit for affordability
-          gasUnitPrice: "100"    // Minimum gas price for Testnet
+          maxGasAmount: "200000",
+          gasUnitPrice: "100"
         }
       };
 
@@ -699,8 +739,8 @@ export class ProjectEscrowContractClient {
           functionArguments: [projectId.toString(), amountInOctas.toString()]
         },
         options: {
-          maxGasAmount: "50000",  // Increase from 2000 to 50000
-          gasUnitPrice: "100"    // Minimum gas price for Testnet
+          maxGasAmount: "200000",
+          gasUnitPrice: "100"
         }
       };
 
