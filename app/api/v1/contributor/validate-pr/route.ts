@@ -190,6 +190,32 @@ export async function POST(req: NextRequest) {
     const scoringResult = await scoringResponse.json();
     console.log('PR scoring result:', scoringResult);
 
+    // Normalize analysis if using LLM schema
+    let normalizedAnalysis = scoringResult.analysis;
+    if (normalizedAnalysis && normalizedAnalysis.metric_scores && normalizedAnalysis.metric_scores.execution) {
+      const a = normalizedAnalysis;
+      const llmCategoryMap: Record<string, 'easy' | 'medium' | 'hard'> = {
+        'low-impact': 'easy',
+        'medium-impact': 'medium',
+        'high-impact': 'hard',
+      };
+      normalizedAnalysis = {
+        category: llmCategoryMap[(a.category || '').toLowerCase()] || 'medium',
+        final_score: a.final_score,
+        metric_scores: {
+          code_size: a.metric_scores.execution.code_size,
+          review_cycles: a.metric_scores.execution.review_cycles,
+          review_time: a.metric_scores.execution.review_time,
+          first_review_wait: a.metric_scores.execution.first_review_wait,
+          review_depth: a.metric_scores.execution.review_depth,
+          code_quality: a.metric_scores.execution.code_quality,
+        },
+        reasoning: a.reasoning || '',
+        key_insights: a.key_insights || null,
+        honest_review: a.honest_review || null,
+      };
+    }
+
     // Return successful validation result with PR score
     return NextResponse.json({
       success: true,
@@ -204,7 +230,7 @@ export async function POST(req: NextRequest) {
         prUrl: prUrl,
         projectRepository: `${projectOwner}/${projectRepo}`
       },
-      analysis: scoringResult.analysis,
+      analysis: normalizedAnalysis,
       metadata: {
         validated_at: new Date().toISOString(),
         project_repository: `${projectOwner}/${projectRepo}`,

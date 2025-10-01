@@ -50,20 +50,17 @@ export async function POST(request: NextRequest) {
       } as any
     });
 
-    // Mock JWT token generation - replace with proper JWT library
-    const token = `mock-jwt-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    
+    // TODO: Implement proper JWT token generation
     return NextResponse.json({
       success: true,
-      message: 'Contributor account created successfully',
-      token,
-              user: {
-          id: contributor.id,
-          githubId: contributor.githubId,
-          username: contributor.username,
-          email: (contributor as any).email,
-          role: 'contributor'
-        }
+      message: 'Contributor account created successfully - JWT token generation not implemented',
+      user: {
+        id: contributor.id,
+        githubId: contributor.githubId,
+        username: contributor.username,
+        email: (contributor as any).email,
+        role: 'contributor'
+      }
     }, { status: 201 });
 
   } catch (error) {

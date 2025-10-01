@@ -53,6 +53,16 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // Validate GitHub token
+    const effectiveGithubToken = githubToken || process.env.GITHUB_TOKEN || process.env.GITHUB_ACCESS_TOKEN;
+    if (!effectiveGithubToken) {
+      console.error('Missing GitHub token');
+      return NextResponse.json(
+        { success: false, message: 'GitHub token is required for PR analysis' },
+        { status: 400 }
+      );
+    }
     
     // Validate data types
     if (typeof prNumber !== 'number' || typeof repository !== 'string') {
@@ -179,7 +189,7 @@ export async function POST(request: NextRequest) {
             owner: repoOwner,
             repo: repoName,
             prNumber: prNumber,
-            githubToken: githubToken || process.env.GITHUB_TOKEN || process.env.GITHUB_ACCESS_TOKEN || 'mock-token'
+            githubToken: effectiveGithubToken
           })
         }
       );
@@ -187,12 +197,36 @@ export async function POST(request: NextRequest) {
       if (contributionResponse.ok) {
         const contributionData = await contributionResponse.json();
         if (contributionData.success && contributionData.analysis) {
-          detailedAnalysis = contributionData.analysis;
-          contributionScore = detailedAnalysis.final_score || 0;
-          metricScores = detailedAnalysis.metric_scores;
-          category = detailedAnalysis.category || 'medium';
-          reasoning = detailedAnalysis.reasoning || '';
-          keyInsights = detailedAnalysis.key_insights;
+          // Normalize possible LLM schema to flat structure
+          const a = contributionData.analysis;
+          const isLLMSchema = a && a.metric_scores && a.metric_scores.execution && typeof a.final_score === 'number';
+          const llmCategoryMap: Record<string, 'easy' | 'medium' | 'hard'> = {
+            'low-impact': 'easy',
+            'medium-impact': 'medium',
+            'high-impact': 'hard',
+          };
+
+          const normalized = isLLMSchema ? {
+            category: llmCategoryMap[(a.category || '').toLowerCase()] || 'medium',
+            final_score: a.final_score,
+            metric_scores: {
+              code_size: a.metric_scores.execution.code_size,
+              review_cycles: a.metric_scores.execution.review_cycles,
+              review_time: a.metric_scores.execution.review_time,
+              first_review_wait: a.metric_scores.execution.first_review_wait,
+              review_depth: a.metric_scores.execution.review_depth,
+              code_quality: a.metric_scores.execution.code_quality,
+            },
+            reasoning: a.reasoning || '',
+            key_insights: a.key_insights || null,
+          } : a;
+
+          detailedAnalysis = normalized;
+          contributionScore = normalized.final_score || 0;
+          metricScores = normalized.metric_scores;
+          category = normalized.category || 'medium';
+          reasoning = normalized.reasoning || '';
+          keyInsights = normalized.key_insights;
           
           console.log('✅ Contribution score from GitHub API:', contributionScore);
           console.log('📊 Category:', category);
@@ -210,54 +244,16 @@ export async function POST(request: NextRequest) {
       console.log('⚠️ Using fallback contribution score');
     }
     
-    // Fallback contribution score calculation if API fails
+    // Require successful API response
     if (contributionScore === 0) {
-      console.log('=== FALLBACK CONTRIBUTION SCORE CALCULATION ===');
-      
-      // Enhanced fallback calculation based on PR characteristics
-      const totalChanges = (additions || 0) + (deletions || 0);
-      const changedFiles = 1; // Default assumption
-      
-      // Calculate code size score (1-10)
-      let codeSizeScore = 5; // Default medium
-      if (totalChanges < 50) codeSizeScore = 2; // Small changes
-      else if (totalChanges < 200) codeSizeScore = 5; // Medium changes
-      else if (totalChanges < 500) codeSizeScore = 7; // Large changes
-      else codeSizeScore = 9; // Very large changes
-      
-      // Calculate review quality score (1-10)
-      let reviewQualityScore = 6; // Default
-      if (hasTests) reviewQualityScore += 2;
-      if (description && description.length > 100) reviewQualityScore += 1;
-      if (commits && commits.length > 1) reviewQualityScore += 1;
-      reviewQualityScore = Math.min(10, reviewQualityScore);
-      
-      // Calculate final score (weighted average)
-      contributionScore = Math.round((codeSizeScore * 0.6 + reviewQualityScore * 0.4) * 10) / 10;
-      
-      // Create fallback metric scores
-      metricScores = {
-        code_size: codeSizeScore,
-        review_cycles: 6, // Default assumption
-        review_time: 6, // Default assumption
-        first_review_wait: 6, // Default assumption
-        review_depth: reviewQualityScore,
-        code_quality: reviewQualityScore
-      };
-      
-      category = contributionScore < 4 ? 'easy' : contributionScore < 7 ? 'medium' : 'hard';
-      reasoning = `Fallback calculation: Code size (${codeSizeScore}/10) and review quality (${reviewQualityScore}/10) based on changes (${totalChanges} lines), tests (${hasTests}), and description length (${description?.length || 0} chars).`;
-      
-      keyInsights = {
-        complexity_indicators: `Based on ${totalChanges} lines changed, this appears to be a ${category} contribution.`,
-        quality_indicators: `Code quality indicators: ${hasTests ? 'includes tests' : 'no tests'}, ${description && description.length > 100 ? 'detailed description' : 'minimal description'}.`,
-        timeline_analysis: 'Timeline analysis not available in fallback mode.',
-        risk_assessment: `Estimated ${category} risk based on code size and quality indicators.`
-      };
-      
-      console.log('Fallback contribution score:', contributionScore);
-      console.log('Fallback category:', category);
-      console.log('Fallback metric scores:', metricScores);
+      console.error('GitHub contribution API failed and no fallback available');
+      return NextResponse.json(
+        { 
+          success: false, 
+          message: 'Failed to analyze PR contribution. Please ensure the GitHub contribution API is working properly.' 
+        },
+        { status: 500 }
+      );
     }
     
     // Calculate difference for logging purposes

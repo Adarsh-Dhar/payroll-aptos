@@ -40,13 +40,10 @@ export async function POST(request: NextRequest) {
       } as any
     });
 
-    // Mock JWT token generation - replace with proper JWT library
-    const token = `mock-jwt-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    
+    // TODO: Implement proper JWT token generation
     return NextResponse.json({
       success: true,
-      message: 'Admin account created successfully',
-      token,
+      message: 'Admin account created successfully - JWT token generation not implemented',
       user: {
         id: admin.id,
         email: admin.email,

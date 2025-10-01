@@ -27,27 +27,18 @@ export async function POST(request: NextRequest) {
     }
 
     // TODO: Implement proper password hashing and verification
-    // For now, we'll use a simple check - replace with bcrypt in production
-    // Using type assertion to work around Prisma type issue
-    if (password === (admin as any).password) {
-      // Mock JWT token generation - replace with proper JWT library
-      const token = `mock-jwt-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      
-      return NextResponse.json({
-        success: true,
-        token,
-        user: {
-          id: admin.id,
-          email: admin.email,
-          role: 'admin',
-          name: admin.name || 'Admin User'
-        }
-      });
+    // For now, require proper password verification
+    if (password !== (admin as any).password) {
+      return NextResponse.json(
+        { success: false, message: 'Invalid credentials' },
+        { status: 401 }
+      );
     }
 
+    // TODO: Implement proper JWT token generation
     return NextResponse.json(
-      { success: false, message: 'Invalid credentials' },
-      { status: 401 }
+      { success: false, message: 'JWT token generation not implemented' },
+      { status: 501 }
     );
   } catch (error) {
     if (error instanceof z.ZodError) {

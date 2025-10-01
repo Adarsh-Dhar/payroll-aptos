@@ -29,20 +29,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Mock JWT token generation - replace with proper JWT library
-    const token = `mock-jwt-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    
-    return NextResponse.json({
-      success: true,
-      token,
-              user: {
-          id: contributor.id,
-          githubId: contributor.githubId,
-          username: contributor.username,
-          email: (contributor as any).email,
-          role: 'contributor'
-        }
-    });
+    // TODO: Implement proper JWT token generation
+    return NextResponse.json(
+      { success: false, message: 'JWT token generation not implemented' },
+      { status: 501 }
+    );
 
   } catch (error) {
     if (error instanceof z.ZodError) {

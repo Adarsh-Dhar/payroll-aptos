@@ -110,20 +110,6 @@ export function InitializeVaultButton({
     <Card className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/20">
       <CardContent className="pt-6">
         <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-            <div>
-              <h3 className="font-medium text-amber-800 dark:text-amber-200">
-                Initialize Contract
-              </h3>
-              <p className="text-sm text-amber-700 dark:text-amber-300">
-                {!isVaultInitialized && "Escrow vault needs initialization. "}
-                {!isGeneratorInitialized && "Project ID generator needs initialization. "}
-                Connect your wallet and click the button below to initialize the contract.
-              </p>
-            </div>
-          </div>
-          
           <div className="flex items-center gap-2">
             {success && (
               <div className="flex items-center gap-2 text-green-600 dark:text-green-400">

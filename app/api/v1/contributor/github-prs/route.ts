@@ -20,33 +20,6 @@ export async function GET(request: NextRequest) {
       )
     }
     
-    // Helper function to calculate contribution score
-    function calculateContributionScore(pr: any): number {
-      // Calculate score based on PR complexity and quality
-      let score = 0
-      
-      // Base score for PR creation
-      score += 10
-      
-      // Bonus for having tests
-      if (pr.hasTests) score += 20
-      
-      // Bonus for good PR description
-      if (pr.description && pr.description.length > 100) score += 15
-      
-      // Bonus for code quality (based on file changes)
-      const totalChanges = (pr.additions || 0) + (pr.deletions || 0)
-      if (totalChanges > 0) {
-        score += Math.min(20, totalChanges * 0.1) // Max 20 points for changes
-      }
-      
-      // Bonus for good commit messages
-      if (pr.commits && pr.commits.length > 0) {
-        score += Math.min(15, pr.commits.length * 0.5) // Max 15 points for commits
-      }
-      
-      return Math.min(100, score) // Cap at 100
-    }
 
     // Get the access token from the session
     const accessToken = (session as any).accessToken
@@ -204,62 +177,24 @@ export async function GET(request: NextRequest) {
       const repoName = repoUrlParts[repoUrlParts.length - 1]
       const repoFullName = `${repoOwner}/${repoName}`
       
-      // Calculate bounty based on project settings
+      // Check if project has bounty settings from database
       let bountyAmount = 0
       let projectHasBounty = false
       
-      // Check if project has bounty settings
       if (item.repository_url) {
-        // Extract project name from repository URL
+        // Check if this repository is registered in any project
         const projectName = repoFullName
         console.log(`Checking bounty for project: ${projectName}`)
         
-        // For now, we'll set a default bounty calculation
-        // In a real implementation, you'd query the database for project settings
-        // List of repositories that have bounty enabled
-        const bountyEnabledRepos = [
-          'devpaystream',
-          'devpay',
-          'Adarsh-Dhar/Project-S', // Your specific repository
-          'Project-S' // Also check for just the project name
-        ];
-        
-        // Check if repository is in the bounty-enabled list
-        if (bountyEnabledRepos.some(repo => projectName.includes(repo))) {
-          projectHasBounty = true
-          bountyAmount = 100 // Base bounty amount
-          console.log(`Project ${projectName} has bounty enabled (whitelisted)`)
-        } 
-        // Check if repository has significant changes
-        else if ((item.additions || 0) + (item.deletions || 0) > 50) {
-          projectHasBounty = true
-          bountyAmount = Math.max(50, ((item.additions || 0) + (item.deletions || 0)) * 0.1)
-          console.log(`Project ${projectName} has bounty for significant changes`)
-        }
-        // Check if it's a known project repository
-        else if (projectName.includes('Project') || projectName.includes('project')) {
-          projectHasBounty = true
-          bountyAmount = 50 // Base bounty for project repositories
-          console.log(`Project ${projectName} has bounty enabled (project repository)`)
-        }
-        
-        // Log repository information for debugging
-        console.log(`Repository URL: ${item.repository_url}`)
-        console.log(`Repository owner: ${repoOwner}`)
-        console.log(`Repository name: ${repoName}`)
-        console.log(`Repository full name: ${repoFullName}`)
-        
-        // Check if this repository is registered in any project
-        // This will help debug why the bounty claim is failing
-        console.log(`Checking if repository ${repoFullName} is registered in any project...`)
-        
-        // Check against the same bounty logic
-        if (bountyEnabledRepos.some(repo => repoFullName.includes(repo))) {
-          console.log(`Repository ${repoFullName} appears to be a bounty-enabled project`)
-        } else if (repoFullName.includes('Project') || repoFullName.includes('project')) {
-          console.log(`Repository ${repoFullName} appears to be a bounty-enabled project (project repository)`)
-        } else {
-          console.log(`Repository ${repoFullName} is not a bounty-enabled project`)
+        // Only projects in database have bounty enabled
+        if (existingPRs.length > 0) {
+          const existingPR = existingPRs.find(epr => epr.prNumber === item.number);
+          if (existingPR && existingPR.Project) {
+            projectHasBounty = true
+            // Bounty amount will be calculated by the contribution API
+            bountyAmount = 0 // Will be calculated later
+            console.log(`Project ${projectName} has bounty enabled (found in database)`)
+          }
         }
       }
       
@@ -300,53 +235,13 @@ export async function GET(request: NextRequest) {
         commits: [] // Add commits field for bounty calculation
       }
       
-      // Calculate bounty if project has bounty settings
+      // Bounty amount will be calculated by the contribution API when claiming
       if (projectHasBounty) {
-        // Calculate bounty using L + Dx/10 formula
-        const additions = item.additions || 0
-        const deletions = item.deletions || 0
-        const totalChanges = additions + deletions
-        
-        // Base bounty (L) + (Dx/10) where D is deletions and x is a multiplier
-        const baseBounty = 50 // Base bounty amount
-        const deletionMultiplier = 0.10 // $0.10 per deletion
-        const totalBounty = baseBounty + (deletions * deletionMultiplier)
-        
-        bountyAmount = Math.round(totalBounty * 100) / 100 // Round to 2 decimal places
-        console.log(`Bounty calculated for PR ${item.number}: $${bountyAmount}`)
-        console.log(`Base: $${baseBounty}, Deletions: ${deletions}, Multiplier: $${deletionMultiplier}`)
-        
-        // Calculate contribution score using the existing route logic
-        const contributionScore = calculateContributionScore(item)
-        console.log(`Contribution score for PR ${item.number}: ${contributionScore}`)
-        
-        // Calculate final bounty with contribution multiplier
-        const finalBounty = bountyAmount * (1 + contributionScore * 0.1)
-        console.log(`Final bounty for PR ${item.number}: $${finalBounty}`)
-        
-        // Update the transformed object with the calculated bounty
-        transformed.bountyAmount = finalBounty
+        console.log(`Project ${repoFullName} has bounty enabled - amount will be calculated by contribution API`)
       } else {
         console.log(`No bounty for project ${repoFullName} - not a bounty-enabled project`)
       }
       
-      // Log repository information for debugging
-      console.log(`PR ${item.number} belongs to repository: ${repoFullName}`)
-      console.log(`Repository URL: ${item.repository_url}`)
-      console.log(`Repository owner: ${repoOwner}`)
-      console.log(`Repository name: ${repoName}`)
-      
-      // Check if this repository is registered in any project
-      // This will help debug why the bounty claim is failing
-      console.log(`Checking if repository ${repoFullName} is registered in any project...`)
-      
-      // For now, we'll log the repository information
-      // In a real implementation, you'd query the database for project repositories
-      if (repoFullName.includes('devpaystream') || repoFullName.includes('devpay')) {
-        console.log(`Repository ${repoFullName} appears to be a bounty-enabled project`)
-      } else {
-        console.log(`Repository ${repoFullName} is not a bounty-enabled project`)
-      }
       
       // Check if this PR exists in our database and merge the claimed status
       const existingPR = existingPRs.find(epr => epr.prNumber === item.number);

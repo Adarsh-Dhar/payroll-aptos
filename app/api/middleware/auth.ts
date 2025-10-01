@@ -86,24 +86,19 @@ export async function authenticateDeveloper(request: NextRequest): Promise<NextR
     const token = authHeader.substring(7);
     
     // TODO: Implement proper JWT verification for developers
-    // This is a mock implementation - replace with your JWT service
-    if (token.startsWith('dev-jwt-')) {
-      // Mock user data - replace with actual JWT payload
-      const user = {
-        id: 'dev-1',
-        email: 'dev@example.com',
-        role: 'developer',
-        name: 'Developer User'
-      };
-      
-      // Add user to request context
-      (request as AuthenticatedRequest).user = user;
-      return null; // Continue to handler
+    // For now, require valid JWT tokens
+    if (!token || token.length < 10) {
+      return NextResponse.json(
+        { success: false, message: 'Invalid or expired token' },
+        { status: 401 }
+      );
     }
 
+    // TODO: Verify JWT token and extract user data
+    // This should be replaced with actual JWT verification
     return NextResponse.json(
-      { success: false, message: 'Invalid or expired token' },
-      { status: 401 }
+      { success: false, message: 'JWT verification not implemented' },
+      { status: 501 }
     );
   } catch (error) {
     return NextResponse.json(

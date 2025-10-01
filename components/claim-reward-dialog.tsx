@@ -36,6 +36,19 @@ interface ClaimRewardDialogProps {
   }
 }
 
+interface HonestReview {
+  overall_verdict: string
+  code_quality_roast: string
+  architecture_opinion: string
+  performance_concerns: string
+  security_red_flags: string
+  maintainability_rant: string
+  what_they_did_right: string
+  what_they_fucked_up: string
+  final_verdict: string
+  tone: 'brutal' | 'praising' | 'neutral' | 'disappointed' | 'impressed'
+}
+
 interface ContributionAnalysis {
   category: 'easy' | 'medium' | 'hard'
   final_score: number
@@ -54,6 +67,7 @@ interface ContributionAnalysis {
     timeline_analysis: string
     risk_assessment: string
   }
+  honest_review?: HonestReview
 }
 
 export default function ClaimRewardDialog({ isOpen, onClose, onBountyClaimed, pr }: ClaimRewardDialogProps) {
@@ -97,11 +111,60 @@ export default function ClaimRewardDialog({ isOpen, onClose, onBountyClaimed, pr
       }
 
       const data = await response.json()
-      
+
       if (data.success && data.analysis) {
-        setAnalysis(data.analysis)
-        
-        const score = data.analysis.final_score
+        // Normalize API analysis (supports LLM schema and local fallback schema)
+        const a = data.analysis
+        const isLLMSchema = a && a.metric_scores && a.metric_scores.execution && typeof a.final_score === 'number'
+
+        const llmCategoryMap: Record<string, 'easy' | 'medium' | 'hard'> = {
+          'low-impact': 'easy',
+          'medium-impact': 'medium',
+          'high-impact': 'hard',
+        }
+
+        const normalized: ContributionAnalysis = isLLMSchema ? {
+          category: llmCategoryMap[(a.category || '').toLowerCase()] || 'medium',
+          final_score: a.final_score,
+          metric_scores: {
+            code_size: a.metric_scores.execution.code_size,
+            review_cycles: a.metric_scores.execution.review_cycles,
+            review_time: a.metric_scores.execution.review_time,
+            first_review_wait: a.metric_scores.execution.first_review_wait,
+            review_depth: a.metric_scores.execution.review_depth,
+            code_quality: a.metric_scores.execution.code_quality,
+          },
+          reasoning: a.reasoning || '',
+          key_insights: {
+            complexity_indicators: a.key_insights?.quality_summary || '',
+            quality_indicators: a.key_insights?.impact_assessment || '',
+            timeline_analysis: '',
+            risk_assessment: a.key_insights?.risk_assessment || '',
+          },
+          honest_review: a.honest_review ? {
+            overall_verdict: a.honest_review.overall_verdict || '',
+            code_quality_roast: a.honest_review.code_quality_roast || '',
+            architecture_opinion: a.honest_review.architecture_opinion || '',
+            performance_concerns: a.honest_review.performance_concerns || '',
+            security_red_flags: a.honest_review.security_red_flags || '',
+            maintainability_rant: a.honest_review.maintainability_rant || '',
+            what_they_did_right: a.honest_review.what_they_did_right || '',
+            what_they_fucked_up: a.honest_review.what_they_fucked_up || '',
+            final_verdict: a.honest_review.final_verdict || '',
+            tone: a.honest_review.tone || 'neutral',
+          } : undefined
+        } : {
+          category: a.category,
+          final_score: a.final_score,
+          metric_scores: a.metric_scores,
+          reasoning: a.reasoning,
+          key_insights: a.key_insights,
+          honest_review: a.honest_review
+        }
+
+        setAnalysis(normalized)
+
+        const score = normalized.final_score
         const lowestBounty = pr.Project.lowestBounty || 100
         const highestBounty = pr.Project.highestBounty || 1000
         
@@ -377,6 +440,85 @@ export default function ClaimRewardDialog({ isOpen, onClose, onBountyClaimed, pr
                   </div>
                 </CardContent>
               </Card>
+
+              {/* Honest Review Section */}
+              {analysis.honest_review && (
+                <Card className="border-2 border-orange-200 bg-orange-50">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <span className="text-2xl">🔥</span>
+                      Brutally Honest Review
+                      <Badge 
+                        variant={
+                          analysis.honest_review.tone === 'brutal' ? 'destructive' :
+                          analysis.honest_review.tone === 'praising' ? 'default' :
+                          analysis.honest_review.tone === 'impressed' ? 'default' :
+                          analysis.honest_review.tone === 'disappointed' ? 'secondary' :
+                          'outline'
+                        }
+                        className="text-sm"
+                      >
+                        {analysis.honest_review.tone.toUpperCase()}
+                      </Badge>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {/* Overall Verdict */}
+                    <div className="p-3 bg-white rounded-lg border-l-4 border-orange-500">
+                      <div className="font-semibold text-orange-800 mb-1">Overall Verdict</div>
+                      <div className="text-orange-700 font-medium">{analysis.honest_review.overall_verdict}</div>
+                    </div>
+
+                    {/* Code Quality Roast */}
+                    <div className="p-3 bg-white rounded-lg">
+                      <div className="font-semibold text-gray-800 mb-1">Code Quality Assessment</div>
+                      <div className="text-gray-700">{analysis.honest_review.code_quality_roast}</div>
+                    </div>
+
+                    {/* Architecture Opinion */}
+                    <div className="p-3 bg-white rounded-lg">
+                      <div className="font-semibold text-gray-800 mb-1">Architecture Opinion</div>
+                      <div className="text-gray-700">{analysis.honest_review.architecture_opinion}</div>
+                    </div>
+
+                    {/* Performance & Security */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div className="p-3 bg-white rounded-lg">
+                        <div className="font-semibold text-gray-800 mb-1">Performance</div>
+                        <div className="text-gray-700 text-sm">{analysis.honest_review.performance_concerns}</div>
+                      </div>
+                      <div className="p-3 bg-white rounded-lg">
+                        <div className="font-semibold text-gray-800 mb-1">Security</div>
+                        <div className="text-gray-700 text-sm">{analysis.honest_review.security_red_flags}</div>
+                      </div>
+                    </div>
+
+                    {/* Maintainability */}
+                    <div className="p-3 bg-white rounded-lg">
+                      <div className="font-semibold text-gray-800 mb-1">Maintainability</div>
+                      <div className="text-gray-700">{analysis.honest_review.maintainability_rant}</div>
+                    </div>
+
+                    {/* What They Did Right vs Wrong */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div className="p-3 bg-green-50 rounded-lg border-l-4 border-green-500">
+                        <div className="font-semibold text-green-800 mb-1">✅ What They Did Right</div>
+                        <div className="text-green-700 text-sm">{analysis.honest_review.what_they_did_right}</div>
+                      </div>
+                      <div className="p-3 bg-red-50 rounded-lg border-l-4 border-red-500">
+                        <div className="font-semibold text-red-800 mb-1">❌ What They Fucked Up</div>
+                        <div className="text-red-700 text-sm">{analysis.honest_review.what_they_fucked_up}</div>
+                      </div>
+                    </div>
+
+                    {/* Final Verdict */}
+                    <div className="p-4 bg-gradient-to-r from-orange-100 to-red-100 rounded-lg border-2 border-orange-300">
+                      <div className="font-bold text-orange-900 mb-2">Final Verdict</div>
+                      <div className="text-orange-800 font-medium">{analysis.honest_review.final_verdict}</div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
 
               <Card className="border-green-200 bg-green-50">
                 <CardHeader className="pb-3">

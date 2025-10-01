@@ -47,6 +47,19 @@ interface GitHubCommit {
   };
 }
 
+interface HonestReview {
+  overall_verdict: string;
+  code_quality_roast: string;
+  architecture_opinion: string;
+  performance_concerns: string;
+  security_red_flags: string;
+  maintainability_rant: string;
+  what_they_did_right: string;
+  what_they_fucked_up: string;
+  final_verdict: string;
+  tone: 'brutal' | 'praising' | 'neutral' | 'disappointed' | 'impressed';
+}
+
 interface PRAnalysis {
   category: 'easy' | 'medium' | 'hard';
   final_score: number;
@@ -65,6 +78,7 @@ interface PRAnalysis {
     timeline_analysis: string;
     risk_assessment: string;
   };
+  honest_review?: HonestReview;
 }
 
 export async function POST(req: NextRequest) {
@@ -142,6 +156,7 @@ export async function POST(req: NextRequest) {
     const repoCheckUrl = `https://api.github.com/repos/${owner}/${repo}`;
     console.log('Repository check URL:', repoCheckUrl);
     
+    let repoPrimaryLanguage: string | null = null;
     try {
       const repoResponse = await fetch(repoCheckUrl, { headers });
       console.log('Repository check response status:', repoResponse.status);
@@ -157,6 +172,12 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error }, { status: repoResponse.status });
       }
       console.log('✅ Repository access confirmed');
+      try {
+        const repoJson = await repoResponse.json();
+        repoPrimaryLanguage = (repoJson && typeof repoJson.language === 'string') ? repoJson.language : null;
+      } catch (_) {
+        repoPrimaryLanguage = null;
+      }
     } catch (error) {
       console.error('Repository check failed:', error);
       return NextResponse.json(
@@ -359,7 +380,23 @@ export async function POST(req: NextRequest) {
       }
     };
 
-    // Compute metric scores (1-10 each)
+    // Build repo_context expected by the prompt (heuristic-based where data is unavailable)
+    const criticalHeuristicTerms = ['auth', 'core', 'config', 'env', 'secret', 'payment', 'billing', 'security', 'encrypt', 'decrypt', 'database', 'db', 'schema', 'api', 'controller', 'route'];
+    const critical_files = (filesData || [])
+      .map(f => f.filename)
+      .filter(name => criticalHeuristicTerms.some(term => name.toLowerCase().includes(term)));
+
+    const repo_context = {
+      critical_files,
+      file_dependencies: Object.fromEntries((filesData || []).map(f => [f.filename, [] as string[]])),
+      linked_issues: issueData ? [{ id: issueData.id, title: issueData.title, labels: (issueData.labels || []).map((l: any) => typeof l === 'string' ? l : l.name).filter(Boolean) }] : [],
+      repo_metrics: {
+        overall_test_coverage: null as unknown as string | null,
+        primary_language: repoPrimaryLanguage || null
+      }
+    };
+
+    // Basic metric computation for LLM input
     const metricScores = computeMetricScores({
       pr: prData,
       commits: commitsData,
@@ -371,27 +408,25 @@ export async function POST(req: NextRequest) {
       checkRuns: checkRunsData.check_runs
     });
 
-    const finalScore = Number((
-      metricScores.code_size * 0.20 +
-      metricScores.review_cycles * 0.15 +
-      metricScores.review_time * 0.20 +
-      metricScores.first_review_wait * 0.15 +
-      metricScores.review_depth * 0.15 +
-      metricScores.code_quality * 0.15
-    ).toFixed(1));
+    // Require GEMINI_API_KEY for analysis
+    if (!process.env.GEMINI_API_KEY) {
+      return NextResponse.json(
+        { 
+          error: 'GEMINI_API_KEY is required for PR analysis. Please configure the API key.' 
+        },
+        { status: 500 }
+      );
+    }
 
-    const category: PRAnalysis['category'] = finalScore < 4 ? 'easy' : finalScore < 7 ? 'medium' : 'hard';
-
-    // Try LLM-based derivation first if API key is present
-    let llmAnalysis: PRAnalysis | null = null;
-    if (process.env.GEMINI_API_KEY) {
-      try {
-        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' });
-        const llmInput = {
+    // Use LLM for analysis
+    let analysis: PRAnalysis;
+    try {
+      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' });
+      const llmInput = {
+        pr_data: {
           github: prAnalysisData,
           local_metric_scores: metricScores,
-          local_final_score: finalScore,
           weights: {
             code_size: 0.20,
             review_cycles: 0.15,
@@ -400,31 +435,68 @@ export async function POST(req: NextRequest) {
             review_depth: 0.15,
             code_quality: 0.15
           }
-        };
-        const prompt = `${PR_CATEGORIZATION_PROMPT}\n\nGitHub PR data and preliminary metrics (JSON):\n${JSON.stringify(llmInput, null, 2)}\n`;
-        const result = await model.generateContent(prompt);
-        const text = result.response.text();
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
-        const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : text);
-        // Basic shape validation
-        if (
-          parsed && typeof parsed === 'object' && parsed.metric_scores && typeof parsed.final_score === 'number' && parsed.category
-        ) {
-          llmAnalysis = parsed as PRAnalysis;
-        }
-      } catch (e) {
-        // Fallback to local computation
-        llmAnalysis = null;
+        },
+        repo_context
+      };
+      const prompt = `${PR_CATEGORIZATION_PROMPT}\n\nGitHub PR data and preliminary metrics (JSON):\n${JSON.stringify(llmInput, null, 2)}\n`;
+      const result = await model.generateContent(prompt);
+      const text = result.response.text();
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      
+      if (!jsonMatch) {
+        throw new Error('No valid JSON found in LLM response');
       }
-    }
+      
+      const parsed = JSON.parse(jsonMatch[0]);
+      
+      // Validate required fields
+      if (!parsed || typeof parsed !== 'object' || !parsed.metric_scores || typeof parsed.final_score !== 'number' || !parsed.category) {
+        throw new Error('Invalid LLM response format');
+      }
 
-    const analysis: PRAnalysis = llmAnalysis || {
-      category,
-      final_score: finalScore,
-      metric_scores: metricScores,
-      reasoning: buildReasoning(metricScores, prAnalysisData),
-      key_insights: buildInsights(metricScores, prAnalysisData)
-    };
+      // Normalize the LLM response to match our interface
+      analysis = {
+        category: parsed.category === 'low-impact' ? 'easy' : 
+                 parsed.category === 'medium-impact' ? 'medium' : 'hard',
+        final_score: parsed.final_score,
+        metric_scores: {
+          code_size: parsed.metric_scores?.execution?.code_size || 0,
+          review_cycles: parsed.metric_scores?.execution?.review_cycles || 0,
+          review_time: parsed.metric_scores?.execution?.review_time || 0,
+          first_review_wait: parsed.metric_scores?.execution?.first_review_wait || 0,
+          review_depth: parsed.metric_scores?.execution?.review_depth || 0,
+          code_quality: parsed.metric_scores?.execution?.code_quality || 0,
+        },
+        reasoning: parsed.reasoning || '',
+        key_insights: {
+          complexity_indicators: parsed.key_insights?.impact_assessment || '',
+          quality_indicators: parsed.key_insights?.quality_summary || '',
+          timeline_analysis: '',
+          risk_assessment: parsed.key_insights?.risk_assessment || '',
+        },
+        honest_review: parsed.honest_review ? {
+          overall_verdict: parsed.honest_review.overall_verdict || '',
+          code_quality_roast: parsed.honest_review.code_quality_roast || '',
+          architecture_opinion: parsed.honest_review.architecture_opinion || '',
+          performance_concerns: parsed.honest_review.performance_concerns || '',
+          security_red_flags: parsed.honest_review.security_red_flags || '',
+          maintainability_rant: parsed.honest_review.maintainability_rant || '',
+          what_they_did_right: parsed.honest_review.what_they_did_right || '',
+          what_they_fucked_up: parsed.honest_review.what_they_fucked_up || '',
+          final_verdict: parsed.honest_review.final_verdict || '',
+          tone: parsed.honest_review.tone || 'neutral',
+        } : undefined
+      };
+    } catch (error) {
+      console.error('LLM analysis failed:', error);
+      return NextResponse.json(
+        { 
+          error: 'Failed to analyze PR with LLM', 
+          details: error instanceof Error ? error.message : 'Unknown error' 
+        },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({
       success: true,
@@ -434,7 +506,7 @@ export async function POST(req: NextRequest) {
         analyzed_at: new Date().toISOString(),
         pr_stats: prAnalysisData.pr.stats,
         has_linked_issue: !!issueData,
-        used_llm: !!llmAnalysis
+        used_llm: true
       }
     });
 
@@ -542,10 +614,25 @@ function computeMetricScores(input: {
   const totalLines = (pr.additions || 0) + (pr.deletions || 0);
   const breakdown = getFileTypeBreakdown(files);
   const nonMeaningful = (breakdown.documentation || 0) + (breakdown.config || 0);
-  const meaningfulFactor = Math.max(0.5, 1 - nonMeaningful / Math.max(1, files.length));
+  const meaningfulFactor = Math.max(0.1, 1 - nonMeaningful / Math.max(1, files.length));
   const effectiveLines = totalLines * meaningfulFactor;
+  
+  console.log('File analysis:', {
+    totalLines,
+    breakdown,
+    nonMeaningful,
+    meaningfulFactor,
+    effectiveLines,
+    isDocumentationOnly: breakdown.documentation > 0 && breakdown.code === 0 && breakdown.test === 0
+  });
+  
+  // Special handling for documentation-only changes
   let codeSizeScore = 0;
-  if (effectiveLines < 50 && pr.changed_files <= 2) {
+  if (breakdown.documentation > 0 && breakdown.code === 0 && breakdown.test === 0) {
+    // Pure documentation changes should get very low scores
+    codeSizeScore = Math.min(2, scaleLinear(totalLines, 0, 100, 1, 2));
+    console.log('Documentation-only change detected, codeSizeScore:', codeSizeScore);
+  } else if (effectiveLines < 50 && pr.changed_files <= 2) {
     codeSizeScore = scaleLinear(effectiveLines, 0, 50, 1, 3);
   } else if (effectiveLines <= 300 && pr.changed_files <= 10) {
     codeSizeScore = scaleLinear(effectiveLines, 50, 300, 4, 7);
@@ -609,24 +696,4 @@ function computeMetricScores(input: {
 
 function round1(n: number): number {
   return Number(n.toFixed(1));
-}
-
-function buildReasoning(metrics: PRAnalysis['metric_scores'], data: any): string {
-  const parts: string[] = [];
-  parts.push(`Code size: ${metrics.code_size}/10 with ${data.pr.stats.additions}+ additions and ${data.pr.stats.deletions}- deletions across ${data.pr.stats.changedFiles} files.`);
-  parts.push(`Review cycles: ${metrics.review_cycles}/10 based on review outcomes and iterations.`);
-  parts.push(`Review time: ${metrics.review_time}/10 from creation to merge/update.`);
-  parts.push(`First review wait: ${metrics.first_review_wait}/10 based on time to first human review.`);
-  parts.push(`Review depth: ${metrics.review_depth}/10 from total review and issue comments.`);
-  parts.push(`Code quality: ${metrics.code_quality}/10 using CI statuses/check runs and bot activity.`);
-  return parts.join(' ');
-}
-
-function buildInsights(metrics: PRAnalysis['metric_scores'], data: any): PRAnalysis['key_insights'] {
-  return {
-    complexity_indicators: `Effective lines changed and file type breakdown suggest ${(metrics.code_size >= 7) ? 'broad' : (metrics.code_size <= 3 ? 'small' : 'moderate')} scope.`,
-    quality_indicators: `CI ${(metrics.code_quality >= 8) ? 'passed cleanly' : (metrics.code_quality <= 4 ? 'had failures' : 'had minor issues')}; bot feedback ${(metrics.code_quality >= 8) ? 'minimal' : 'present'}.`,
-    timeline_analysis: `Total review time and first review wait indicate ${(metrics.review_time >= 8 && metrics.first_review_wait >= 8) ? 'swift' : (metrics.review_time <= 4 ? 'prolonged' : 'typical')} process.`,
-    risk_assessment: `${(metrics.review_cycles <= 4 && metrics.code_quality >= 8) ? 'Low' : (metrics.review_cycles <= 6 ? 'Medium' : 'High')} risk based on iterations and CI results.`
-  };
 }

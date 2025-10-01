@@ -46,6 +46,19 @@ interface ClaimFormData {
   githubToken: string
 }
 
+interface HonestReview {
+  overall_verdict: string
+  code_quality_roast: string
+  architecture_opinion: string
+  performance_concerns: string
+  security_red_flags: string
+  maintainability_rant: string
+  what_they_did_right: string
+  what_they_fucked_up: string
+  final_verdict: string
+  tone: 'brutal' | 'praising' | 'neutral' | 'disappointed' | 'impressed'
+}
+
 interface PRValidation {
   validation: {
     prNumber: number
@@ -67,6 +80,7 @@ interface PRValidation {
       code_quality: number
     }
     reasoning: string
+    honest_review?: HonestReview
   }
 }
 
@@ -572,6 +586,53 @@ export default function ClaimPage() {
                             <div className="flex items-center gap-2">
                               <AlertCircle className="h-4 w-4" />
                               <span className="text-xs">Score calculation in progress...</span>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Honest Review Section */}
+                        {prValidation?.analysis?.honest_review && (
+                          <div className="mt-4 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                            <div className="flex items-center gap-2 mb-3">
+                              <span className="text-xl">🔥</span>
+                              <span className="font-semibold text-orange-800">Brutally Honest Review</span>
+                              <span className={`px-2 py-1 text-xs rounded-full ${
+                                prValidation.analysis.honest_review.tone === 'brutal' ? 'bg-red-100 text-red-800' :
+                                prValidation.analysis.honest_review.tone === 'praising' ? 'bg-green-100 text-green-800' :
+                                prValidation.analysis.honest_review.tone === 'impressed' ? 'bg-blue-100 text-blue-800' :
+                                prValidation.analysis.honest_review.tone === 'disappointed' ? 'bg-yellow-100 text-yellow-800' :
+                                'bg-gray-100 text-gray-800'
+                              }`}>
+                                {prValidation.analysis.honest_review.tone.toUpperCase()}
+                              </span>
+                            </div>
+                            
+                            <div className="space-y-3 text-sm">
+                              <div className="p-2 bg-white rounded border-l-4 border-orange-500">
+                                <div className="font-medium text-orange-800 mb-1">Overall Verdict</div>
+                                <div className="text-orange-700">{prValidation.analysis.honest_review.overall_verdict}</div>
+                              </div>
+                              
+                              <div className="p-2 bg-white rounded">
+                                <div className="font-medium text-gray-800 mb-1">Code Quality</div>
+                                <div className="text-gray-700">{prValidation.analysis.honest_review.code_quality_roast}</div>
+                              </div>
+                              
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                <div className="p-2 bg-green-50 rounded border-l-4 border-green-500">
+                                  <div className="font-medium text-green-800 mb-1">✅ What's Good</div>
+                                  <div className="text-green-700 text-xs">{prValidation.analysis.honest_review.what_they_did_right}</div>
+                                </div>
+                                <div className="p-2 bg-red-50 rounded border-l-4 border-red-500">
+                                  <div className="font-medium text-red-800 mb-1">❌ What's Wrong</div>
+                                  <div className="text-red-700 text-xs">{prValidation.analysis.honest_review.what_they_fucked_up}</div>
+                                </div>
+                              </div>
+                              
+                              <div className="p-3 bg-gradient-to-r from-orange-100 to-red-100 rounded border-2 border-orange-300">
+                                <div className="font-bold text-orange-900 mb-1">Final Verdict</div>
+                                <div className="text-orange-800 font-medium">{prValidation.analysis.honest_review.final_verdict}</div>
+                              </div>
                             </div>
                           </div>
                         )}
