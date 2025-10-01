@@ -32,9 +32,6 @@ const config = new AptosConfig({
 });
 const aptos = new Aptos(config);
 
-// Debug logging to verify network configuration
-console.log("Contract client initialized with:", {
-  network: APTOS_NETWORK,
   contractAddress: CONTRACT_ADDRESS,
   contractModule: CONTRACT_MODULE,
   fullnodeUrl: "https://fullnode.testnet.aptoslabs.com/v1",
@@ -267,7 +264,6 @@ export class ProjectEscrowContractClient {
       }
       return 0;
     } catch (error) {
-      console.log(`Error getting project balance for project ${projectId}:`, error);
       return 0;
     }
   }
@@ -292,7 +288,6 @@ export class ProjectEscrowContractClient {
       }
       return null;
     } catch (error) {
-      console.log(`Error getting project owner for project ${projectId}:`, error);
       return null;
     }
   }
@@ -319,7 +314,6 @@ export class ProjectEscrowContractClient {
       }
       return null;
     } catch (error) {
-      console.log(`Error getting project name for project ${projectId}:`, error);
       return null;
     }
   }
@@ -344,7 +338,6 @@ export class ProjectEscrowContractClient {
       }
       return false;
     } catch (error) {
-      console.log(`Error checking project existence for project ${projectId}:`, error);
       return false;
     }
   }
@@ -368,7 +361,6 @@ export class ProjectEscrowContractClient {
       }
       return 0;
     } catch (error) {
-      console.log("Error getting total balance:", error);
       return 0;
     }
   }
@@ -392,7 +384,6 @@ export class ProjectEscrowContractClient {
       }
       return 0;
     } catch (error) {
-      console.log("Error getting next project ID:", error);
       return 0;
     }
   }
@@ -416,7 +407,6 @@ export class ProjectEscrowContractClient {
       }
       return 0;
     } catch (error) {
-      console.log("Error getting total projects:", error);
       return 0;
     }
   }
@@ -433,7 +423,6 @@ export class ProjectEscrowContractClient {
       });
       return resource.data as EscrowVault;
     } catch (error) {
-      console.log(`Escrow vault not found at address: ${this.contractAddress}`);
       return null;
     }
   }
@@ -450,7 +439,6 @@ export class ProjectEscrowContractClient {
       });
       return resource.data as AutoProjectIdGenerator;
     } catch (error) {
-      console.log(`Auto project ID generator not found at address: ${this.contractAddress}`);
       return null;
     }
   }
@@ -519,7 +507,6 @@ export class ProjectEscrowContractClient {
       // Convert APT to octas
       const amountInOctas = projectEscrowUtils.aptToOctas(amountInApt);
       
-      console.log(`Creating and funding project: ${amountInApt} APT = ${amountInOctas} octas`);
 
       // Create the project escrow
       const result = await this.createProjectEscrowAuto(account, amountInOctas);
@@ -551,8 +538,6 @@ export class ProjectEscrowContractClient {
     amountInApt: number
   ): Promise<{ success: boolean; transactionHash?: string; error?: string }> {
     try {
-      console.log("Creating project escrow with wallet adapter:", {
-        accountAddress,
         amountInApt,
         contractAddress: this.contractAddress,
         contractModule: this.contractModule
@@ -560,7 +545,6 @@ export class ProjectEscrowContractClient {
 
       // Check if escrow vault is initialized
       const isVaultInitialized = await this.isEscrowVaultInitialized();
-      console.log("Escrow vault initialized:", isVaultInitialized);
       
       if (!isVaultInitialized) {
         return { 
@@ -571,7 +555,6 @@ export class ProjectEscrowContractClient {
 
       // Check if auto project ID generator is initialized
       const isGeneratorInitialized = await this.isAutoProjectIdGeneratorInitialized();
-      console.log("Auto project ID generator initialized:", isGeneratorInitialized);
       
       if (!isGeneratorInitialized) {
         return { 
@@ -583,7 +566,6 @@ export class ProjectEscrowContractClient {
       // Convert APT to octas
       const amountInOctas = projectEscrowUtils.aptToOctas(amountInApt);
       
-      console.log(`Creating and funding project: ${amountInApt} APT = ${amountInOctas} octas`);
 
       // Create the transaction data in the format expected by wallet adapter
       const transactionData = {
@@ -598,21 +580,15 @@ export class ProjectEscrowContractClient {
         }
       };
 
-      console.log("Transaction data prepared:", transactionData);
-      console.log("Transaction data type:", typeof transactionData);
-      console.log("Transaction data keys:", Object.keys(transactionData));
 
       // Sign and submit using wallet adapter
-      console.log("About to call signAndSubmitTransaction...");
       const pendingTxn = await signAndSubmitTransaction(transactionData);
-      console.log("Transaction submitted:", pendingTxn);
       
       // Wait for transaction to complete
       const result = await this.aptos.waitForTransaction({
         transactionHash: pendingTxn.hash,
       });
       
-      console.log("Transaction completed:", result);
       
       return {
         success: true,
@@ -655,7 +631,6 @@ export class ProjectEscrowContractClient {
       // Convert APT to octas
       const amountInOctas = projectEscrowUtils.aptToOctas(amountInApt);
       
-      console.log(`Funding project ${projectId}: ${amountInApt} APT = ${amountInOctas} octas`);
 
       // Create the transaction data in the format expected by wallet adapter
       const transactionData = {
@@ -670,14 +645,9 @@ export class ProjectEscrowContractClient {
         }
       };
 
-      console.log("Transaction data prepared:", transactionData);
-      console.log("Transaction data type:", typeof transactionData);
-      console.log("Transaction data keys:", Object.keys(transactionData));
 
       // Sign and submit using wallet adapter
-      console.log("About to call signAndSubmitTransaction...");
       const pendingTxn = await signAndSubmitTransaction(transactionData);
-      console.log("Transaction submitted:", pendingTxn);
       
       // Wait for transaction to complete
       const result = await this.aptos.waitForTransaction({
@@ -733,8 +703,6 @@ export class ProjectEscrowContractClient {
         };
       }
 
-      console.log(`Withdrawing from project ${projectId}: ${amountInApt} APT = ${amountInOctas} octas`);
-      console.log(`Project balance: ${projectEscrowUtils.formatApt(projectBalance)}`);
 
       // Create the transaction data in the format expected by wallet adapter
       const transactionData = {
@@ -749,14 +717,9 @@ export class ProjectEscrowContractClient {
         }
       };
 
-      console.log("Transaction data prepared:", transactionData);
-      console.log("Transaction data type:", typeof transactionData);
-      console.log("Transaction data keys:", Object.keys(transactionData));
 
       // Sign and submit using wallet adapter
-      console.log("About to call signAndSubmitTransaction...");
       const pendingTxn = await signAndSubmitTransaction(transactionData);
-      console.log("Transaction submitted:", pendingTxn);
       
       // Wait for transaction to complete
       const result = await this.aptos.waitForTransaction({

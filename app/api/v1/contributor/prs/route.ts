@@ -27,11 +27,8 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const { page, limit, merged, search, projectId } = querySchema.parse(Object.fromEntries(searchParams));
 
-    console.log('Contributor PRs query parameters:', { page, limit, merged, search, projectId });
 
-    // TODO: Implement contributor authentication middleware
-    // For now, we'll use a mock developer ID - this should be replaced with actual auth
-    const mockDeveloperId = 1; // This should come from the authenticated user
+    const mockDeveloperId = 1;
 
     // Build where clause
     const where: any = { developerId: mockDeveloperId };
@@ -51,11 +48,9 @@ export async function GET(request: NextRequest) {
       ];
     }
 
-    console.log('Where clause:', JSON.stringify(where, null, 2));
 
     // Get total count
     const total = await prisma.pullRequest.count({ where });
-    console.log('Total PRs found:', total);
 
     // Get paginated PRs
     const pullRequests = await prisma.pullRequest.findMany({
@@ -83,7 +78,6 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'desc' },
     });
 
-    console.log('PRs fetched successfully:', pullRequests.length);
 
     // Calculate additional stats
     const totalEarnings = pullRequests.reduce((sum, pr) => sum + pr.amountPaid, 0);

@@ -68,12 +68,9 @@ export async function GET(request: NextRequest) {
       };
     }
 
-    console.log('Query parameters:', { page, limit, search, adminId, isActive, tags });
-    console.log('Where clause:', JSON.stringify(where, null, 2));
 
     // Get total count
     const total = await prisma.project.count({ where });
-    console.log('Total projects found:', total);
 
     // Get paginated projects
     const projects = await prisma.project.findMany({
@@ -98,7 +95,6 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'desc' },
     });
 
-    console.log('Projects fetched successfully:', projects.length);
 
     return NextResponse.json({
       success: true,

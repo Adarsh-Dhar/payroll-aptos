@@ -207,8 +207,6 @@ export default function ClaimRewardDialog({ isOpen, onClose, onBountyClaimed, pr
         bountyAmount: bountyAmount // Pass the calculated bounty amount
       }
       
-      console.log('Sending to claim-bounty API:', requestBody)
-      console.log('PR object:', pr)
       
       // First, call the claim bounty API to get the bounty amount
       const claimResponse = await fetch(`${baseUrl}/api/v1/contributor/github-prs/claim-bounty`, {
@@ -250,7 +248,6 @@ export default function ClaimRewardDialog({ isOpen, onClose, onBountyClaimed, pr
           console.warn('Failed to mark PR as claimed:', markErrorData.message)
           // Don't throw error here as the bounty was already claimed
         } else {
-          console.log('PR marked as claimed successfully')
         }
 
         alert(`Bounty claimed successfully! Amount: $${claimResult.data.bountyAmount}`)

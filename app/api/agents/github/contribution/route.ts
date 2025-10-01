@@ -83,10 +83,7 @@ interface PRAnalysis {
 
 export async function POST(req: NextRequest) {
   try {
-    console.log('=== GITHUB CONTRIBUTION API REQUEST ===');
-    
     const body = await req.json();
-    console.log('Request body:', body);
     
     const { prUrl, repoUrl, owner: bodyOwner, repo: bodyRepo, prNumber: bodyPrNumber, githubToken } = body;
 
@@ -95,16 +92,13 @@ export async function POST(req: NextRequest) {
     let repo = bodyRepo as string | undefined;
     let prNumber = bodyPrNumber as number | string | undefined;
 
-    console.log('Initial values:', { owner, repo, prNumber, prUrl, repoUrl });
 
     if (typeof prUrl === 'string' && prUrl.length > 0) {
-      console.log('Parsing PR URL:', prUrl);
       try {
         const parsed = parsePrUrl(prUrl);
         owner = parsed.owner;
         repo = parsed.repo;
         prNumber = parsed.prNumber;
-        console.log('Parsed from PR URL:', { owner, repo, prNumber });
       } catch (error) {
         console.error('Failed to parse PR URL:', error);
         return NextResponse.json(
@@ -115,12 +109,10 @@ export async function POST(req: NextRequest) {
     }
 
     if ((!owner || !repo || !prNumber) && typeof repoUrl === 'string' && repoUrl.length > 0) {
-      console.log('Parsing repo URL:', repoUrl);
       try {
         const parsedRepo = parseRepoUrl(repoUrl);
         owner ||= parsedRepo.owner;
         repo ||= parsedRepo.repo;
-        console.log('Parsed from repo URL:', { owner, repo });
       } catch (error) {
         console.error('Failed to parse repo URL:', error);
         return NextResponse.json(
@@ -130,11 +122,9 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    console.log('Final parsed values:', { owner, repo, prNumber });
 
     // Validate required fields
     if (!owner || !repo || !prNumber || !githubToken) {
-      console.error('Missing required fields:', { owner, repo, prNumber, hasToken: !!githubToken });
       return NextResponse.json(
         { error: 'Missing required fields: provide prUrl (recommended) or owner, repo, prNumber, and githubToken' },
         { status: 400 }
@@ -142,7 +132,6 @@ export async function POST(req: NextRequest) {
     }
 
     const baseUrl = `https://api.github.com/repos/${owner}/${repo}/pulls/${prNumber}`;
-    console.log('Parsed values:', { owner, repo, prNumber, baseUrl });
     const authScheme = (typeof githubToken === 'string' && githubToken.startsWith('ghp_')) ? 'token' : 'Bearer';
     const headers = {
       'Authorization': `${authScheme} ${githubToken}`,
@@ -152,14 +141,11 @@ export async function POST(req: NextRequest) {
     } as Record<string, string>;
 
     // First check if repository exists
-    console.log('Checking repository access...');
     const repoCheckUrl = `https://api.github.com/repos/${owner}/${repo}`;
-    console.log('Repository check URL:', repoCheckUrl);
     
     let repoPrimaryLanguage: string | null = null;
     try {
       const repoResponse = await fetch(repoCheckUrl, { headers });
-      console.log('Repository check response status:', repoResponse.status);
       
       if (!repoResponse.ok) {
         if (repoResponse.status === 404) {
@@ -171,7 +157,6 @@ export async function POST(req: NextRequest) {
         console.error(error);
         return NextResponse.json({ error }, { status: repoResponse.status });
       }
-      console.log('✅ Repository access confirmed');
       try {
         const repoJson = await repoResponse.json();
         repoPrimaryLanguage = (repoJson && typeof repoJson.language === 'string') ? repoJson.language : null;
@@ -187,13 +172,10 @@ export async function POST(req: NextRequest) {
     }
 
     // Fetch PR details
-    console.log('Fetching PR details...');
-    console.log('PR URL:', baseUrl);
     
     let prData: GitHubPR;
     try {
       const prResponse = await fetch(baseUrl, { headers });
-      console.log('PR response status:', prResponse.status);
       
       if (!prResponse.ok) {
         let detail = '';
@@ -207,15 +189,6 @@ export async function POST(req: NextRequest) {
       }
       
       prData = await prResponse.json();
-      console.log('✅ PR details fetched successfully');
-      console.log('PR data:', { 
-        id: prData.id, 
-        number: prData.number, 
-        title: prData.title,
-        state: prData.state,
-        additions: prData.additions,
-        deletions: prData.deletions
-      });
     } catch (error) {
       console.error('PR fetch failed:', error);
       return NextResponse.json(
@@ -449,13 +422,6 @@ export async function POST(req: NextRequest) {
       
       const parsed = JSON.parse(jsonMatch[0]);
       
-      console.log('=== LLM RESPONSE DEBUG ===');
-      console.log('Raw LLM response text:', text);
-      console.log('Parsed LLM response:', JSON.stringify(parsed, null, 2));
-      console.log('Final score from LLM:', parsed.final_score);
-      console.log('Category from LLM:', parsed.category);
-      console.log('Tone from LLM:', parsed.honest_review?.tone);
-      
       // Validate required fields
       if (!parsed || typeof parsed !== 'object' || !parsed.metric_scores || typeof parsed.final_score !== 'number' || !parsed.category) {
         throw new Error('Invalid LLM response format');
@@ -494,11 +460,6 @@ export async function POST(req: NextRequest) {
           tone: parsed.honest_review.tone || 'neutral',
         } : undefined
       };
-      
-      console.log('=== FINAL ANALYSIS DEBUG ===');
-      console.log('Final analysis object:', JSON.stringify(analysis, null, 2));
-      console.log('Final score in analysis:', analysis.final_score);
-      console.log('Category in analysis:', analysis.category);
     } catch (error) {
       console.error('LLM analysis failed:', error);
       return NextResponse.json(
@@ -629,21 +590,11 @@ function computeMetricScores(input: {
   const meaningfulFactor = Math.max(0.1, 1 - nonMeaningful / Math.max(1, files.length));
   const effectiveLines = totalLines * meaningfulFactor;
   
-  console.log('File analysis:', {
-    totalLines,
-    breakdown,
-    nonMeaningful,
-    meaningfulFactor,
-    effectiveLines,
-    isDocumentationOnly: breakdown.documentation > 0 && breakdown.code === 0 && breakdown.test === 0
-  });
-  
   // Special handling for documentation-only changes
   let codeSizeScore = 0;
   if (breakdown.documentation > 0 && breakdown.code === 0 && breakdown.test === 0) {
     // Pure documentation changes should get very low scores
     codeSizeScore = Math.min(2, scaleLinear(totalLines, 0, 100, 1, 2));
-    console.log('Documentation-only change detected, codeSizeScore:', codeSizeScore);
   } else if (effectiveLines < 50 && pr.changed_files <= 2) {
     codeSizeScore = scaleLinear(effectiveLines, 0, 50, 1, 3);
   } else if (effectiveLines <= 300 && pr.changed_files <= 10) {

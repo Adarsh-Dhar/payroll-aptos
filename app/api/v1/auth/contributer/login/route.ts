@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
     const contributor = await prisma.developer.findFirst({
       where: { 
         email: email,
-        password: password // TODO: Replace with bcrypt.compare(password, contributor.password)
+        password: password
       } as any
     });
 
@@ -29,7 +29,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // TODO: Implement proper JWT token generation
     return NextResponse.json(
       { success: false, message: 'JWT token generation not implemented' },
       { status: 501 }

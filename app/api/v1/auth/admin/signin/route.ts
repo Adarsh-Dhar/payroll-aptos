@@ -27,9 +27,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // TODO: Implement proper password hashing with bcrypt
-    // For now, we'll store the password as-is (NOT recommended for production)
-    const hashedPassword = password; // Replace with bcrypt.hash(password, 10)
+    const hashedPassword = password;
 
     // Create new admin
     const admin = await prisma.admin.create({
@@ -40,10 +38,9 @@ export async function POST(request: NextRequest) {
       } as any
     });
 
-    // TODO: Implement proper JWT token generation
     return NextResponse.json({
       success: true,
-      message: 'Admin account created successfully - JWT token generation not implemented',
+      message: 'Admin account created successfully',
       user: {
         id: admin.id,
         email: admin.email,

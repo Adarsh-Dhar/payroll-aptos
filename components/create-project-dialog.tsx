@@ -103,7 +103,6 @@ export function CreateProjectDialog() {
 			})
 			
 			const data = await res.json()
-			console.log("Create project response:", { status: res.status, data })
 
 			if (res.ok) {
 				toast.success("Project created successfully!")

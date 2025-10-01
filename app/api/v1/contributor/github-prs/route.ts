@@ -5,15 +5,11 @@ import { PrismaClient } from '@prisma/client'
 
 export async function GET(request: NextRequest) {
   try {
-    console.log('GitHub PRs API called')
     
     // Get the authenticated session
     const session = await getServerSession(authOptions)
-    console.log('Session found:', !!session)
-    console.log('Session user:', session?.user)
     
     if (!session?.user?.email) {
-      console.log('No session or user email found')
       return NextResponse.json(
         { success: false, message: 'Unauthorized - No session found' },
         { status: 401 }
@@ -23,10 +19,8 @@ export async function GET(request: NextRequest) {
 
     // Get the access token from the session
     const accessToken = (session as any).accessToken
-    console.log('Access token present:', !!accessToken)
     
     if (!accessToken) {
-      console.log('No GitHub access token found in session')
       return NextResponse.json(
         { success: false, message: 'No GitHub access token found' },
         { status: 401 }
@@ -38,7 +32,6 @@ export async function GET(request: NextRequest) {
     let username = searchParams.get('username')
     
     if (!username) {
-      console.log('No username provided in query params')
       return NextResponse.json(
         { success: false, message: 'GitHub username is required' },
         { status: 400 }
@@ -64,19 +57,12 @@ export async function GET(request: NextRequest) {
     // Manual override for testing - remove this in production
     if (githubUsername === 'Adarsh Dhar') {
       githubUsername = 'Adarsh-Dhar'
-      console.log('Manual override: Using GitHub username "Adarsh-Dhar" for testing')
     }
     
-    console.log('Original username from query:', username)
-    console.log('Session user data:', sessionUser)
-    console.log('Using GitHub username:', githubUsername)
 
-    console.log('Fetching GitHub PRs for username:', githubUsername)
-    console.log('Using access token:', accessToken ? 'Present' : 'Missing')
 
     // Fetch PRs from GitHub API
     const githubUrl = `https://api.github.com/search/issues?q=type:pr+author:${githubUsername}&per_page=100&sort=created&order=desc`
-    console.log('GitHub API URL:', githubUrl)
     
     const githubResponse = await fetch(githubUrl, {
       headers: {
@@ -86,8 +72,6 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    console.log('GitHub API response status:', githubResponse.status)
-    console.log('GitHub API response headers:', Object.fromEntries(githubResponse.headers.entries()))
 
     if (!githubResponse.ok) {
       const errorText = await githubResponse.text()
@@ -105,14 +89,8 @@ export async function GET(request: NextRequest) {
     }
 
     const githubData = await githubResponse.json()
-    console.log('GitHub API response data:', JSON.stringify(githubData, null, 2))
-    console.log('Total PRs found:', githubData.total_count)
-    console.log('Items in response:', githubData.items?.length || 0)
     
     if (githubData.items && githubData.items.length > 0) {
-      console.log('First PR sample:', JSON.stringify(githubData.items[0], null, 2))
-      console.log('Repository URL from first PR:', githubData.items[0].repository_url)
-      console.log('Repository URL parts:', githubData.items[0].repository_url.split('/'))
     }
 
     // List of repositories that have bounty enabled
@@ -166,7 +144,6 @@ export async function GET(request: NextRequest) {
       });
       await prisma.$disconnect();
     } catch (error) {
-      console.log('Failed to fetch existing PRs from database:', error);
     }
 
     // Transform GitHub data to match our expected format
@@ -184,7 +161,6 @@ export async function GET(request: NextRequest) {
       if (item.repository_url) {
         // Check if this repository is registered in any project
         const projectName = repoFullName
-        console.log(`Checking bounty for project: ${projectName}`)
         
         // Only projects in database have bounty enabled
         if (existingPRs.length > 0) {
@@ -193,7 +169,6 @@ export async function GET(request: NextRequest) {
             projectHasBounty = true
             // Bounty amount will be calculated by the contribution API
             bountyAmount = 0 // Will be calculated later
-            console.log(`Project ${projectName} has bounty enabled (found in database)`)
           }
         }
       }
@@ -237,9 +212,7 @@ export async function GET(request: NextRequest) {
       
       // Bounty amount will be calculated by the contribution API when claiming
       if (projectHasBounty) {
-        console.log(`Project ${repoFullName} has bounty enabled - amount will be calculated by contribution API`)
       } else {
-        console.log(`No bounty for project ${repoFullName} - not a bounty-enabled project`)
       }
       
       
@@ -265,23 +238,12 @@ export async function GET(request: NextRequest) {
         
         // IMPORTANT: Never overwrite the repository field with database values
         // Keep the original GitHub repository information for API calls
-        console.log(`PR ${item.number} - GitHub repo: ${transformed.repository}, Database project: ${existingPR.Project?.name || 'none'}`);
         
-        console.log(`PR ${item.number} found in database - Claimed: ${existingPR.bountyClaimed}, Amount: $${existingPR.amountPaid}`);
       }
       
       // Log the project ID and PR number that will be used for bounty claims
-      console.log(`This PR will use Project ID: ${transformed.projectId}, PR Number: ${transformed.prNumber}`)
       
       // Log available data for bounty calculation
-      console.log(`Available data for bounty calculation:`)
-      console.log(`  - Additions: ${transformed.additions}`)
-      console.log(`  - Deletions: ${transformed.deletions}`)
-      console.log(`  - Has Tests: ${transformed.hasTests}`)
-      console.log(`  - Description Length: ${transformed.description.length}`)
-      console.log(`  - Commits: ${transformed.commits || 'Not available'}`)
-      console.log(`  - Bounty Claimed: ${transformed.bountyClaimed}`)
-      console.log(`  - Bounty Amount: $${transformed.bountyClaimedAmount}`)
       
       return transformed
     })
@@ -307,22 +269,11 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    console.log('Transformed response:', JSON.stringify(response, null, 2))
     
     // Log summary of all repositories found
-    console.log('=== REPOSITORY SUMMARY ===')
-    const uniqueRepos = [...new Set(transformedPRs.map((pr: any) => pr.Project.name))]
-    uniqueRepos.forEach(repo => {
-      console.log(`Repository: ${repo}`)
-    })
-    console.log(`Total unique repositories: ${uniqueRepos.length}`)
     
     // Log unique IDs to check for duplicates
-    console.log('=== ID UNIQUENESS CHECK ===')
-    const ids = transformedPRs.map((pr: any) => pr.id)
-    const uniqueIds = [...new Set(ids)]
-    console.log(`Total PRs: ${ids.length}, Unique IDs: ${uniqueIds.length}`)
-    if (ids.length !== uniqueIds.length) {
+    if (false) {
       console.warn('⚠️ Duplicate IDs detected!')
       const duplicates = ids.filter((id: any, index: number) => ids.indexOf(id) !== index)
       console.warn('Duplicate IDs:', duplicates)

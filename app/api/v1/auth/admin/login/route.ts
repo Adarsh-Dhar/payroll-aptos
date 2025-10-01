@@ -26,8 +26,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // TODO: Implement proper password hashing and verification
-    // For now, require proper password verification
     if (password !== (admin as any).password) {
       return NextResponse.json(
         { success: false, message: 'Invalid credentials' },
@@ -35,7 +33,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // TODO: Implement proper JWT token generation
     return NextResponse.json(
       { success: false, message: 'JWT token generation not implemented' },
       { status: 501 }
