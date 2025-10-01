@@ -569,74 +569,74 @@ export default function ClaimPage() {
                       }}>Reset</Button>
                     </div>
                     {validationError && (
-                      <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700 flex items-start gap-2">
-                        <XCircle className="h-4 w-4 mt-0.5" />
+                      <div className="mt-2 p-3 bg-red-900/20 border border-red-500/50 rounded text-sm text-red-200 flex items-start gap-2">
+                        <XCircle className="h-4 w-4 mt-0.5 text-red-400" />
                         <span>{validationError}</span>
                       </div>
                     )}
                     {prValidation && (
-                      <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded text-sm text-blue-800">
-                        <div className="font-medium mb-1">PR Validated</div>
-                        <div>PR #{prValidation.validation.prNumber} • {prValidation.validation.prTitle}</div>
-                        <div>Author: {prValidation.validation.prAuthor}</div>
+                      <div className="mt-2 p-3 bg-blue-900/20 border border-blue-500/50 rounded text-sm text-blue-200">
+                        <div className="font-medium mb-1 text-blue-100">PR Validated</div>
+                        <div className="text-blue-300">PR #{prValidation.validation.prNumber} • {prValidation.validation.prTitle}</div>
+                        <div className="text-blue-300">Author: {prValidation.validation.prAuthor}</div>
                         {prScore !== null ? (
-                          <div className="mt-2 pt-2 border-t border-blue-300">
+                          <div className="mt-2 pt-2 border-t border-blue-400/30">
                             <div className="flex items-center gap-2">
-                              <Shield className="h-4 w-4" />
-                              <span className="font-medium">Contribution Score: {prScore.toFixed(1)}/10</span>
+                              <Shield className="h-4 w-4 text-blue-400" />
+                              <span className="font-medium text-blue-100">Contribution Score: {prScore.toFixed(1)}/10</span>
                             </div>
                           </div>
                         ) : (
-                          <div className="mt-2 pt-2 border-t border-blue-300">
+                          <div className="mt-2 pt-2 border-t border-blue-400/30">
                             <div className="flex items-center gap-2">
-                              <AlertCircle className="h-4 w-4" />
-                              <span className="text-xs">Score calculation in progress...</span>
+                              <AlertCircle className="h-4 w-4 text-blue-400" />
+                              <span className="text-xs text-blue-300">Score calculation in progress...</span>
                             </div>
                           </div>
                         )}
                         
                         {/* Honest Review Section */}
                         {prValidation?.analysis?.honest_review && (
-                          <div className="mt-4 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                          <div className="mt-4 p-4 bg-orange-900/20 border border-orange-500/50 rounded-lg">
                             <div className="flex items-center gap-2 mb-3">
                               <span className="text-xl">🔥</span>
-                              <span className="font-semibold text-orange-800">Brutally Honest Review</span>
+                              <span className="font-semibold text-orange-300">Brutally Honest Review</span>
                               <span className={`px-2 py-1 text-xs rounded-full ${
-                                prValidation.analysis.honest_review.tone === 'brutal' ? 'bg-red-100 text-red-800' :
-                                prValidation.analysis.honest_review.tone === 'praising' ? 'bg-green-100 text-green-800' :
-                                prValidation.analysis.honest_review.tone === 'impressed' ? 'bg-blue-100 text-blue-800' :
-                                prValidation.analysis.honest_review.tone === 'disappointed' ? 'bg-yellow-100 text-yellow-800' :
-                                'bg-gray-100 text-gray-800'
+                                prValidation.analysis.honest_review.tone === 'brutal' ? 'bg-red-900/30 text-red-300 border border-red-500/50' :
+                                prValidation.analysis.honest_review.tone === 'praising' ? 'bg-green-900/30 text-green-300 border border-green-500/50' :
+                                prValidation.analysis.honest_review.tone === 'impressed' ? 'bg-blue-900/30 text-blue-300 border border-blue-500/50' :
+                                prValidation.analysis.honest_review.tone === 'disappointed' ? 'bg-yellow-900/30 text-yellow-300 border border-yellow-500/50' :
+                                'bg-gray-900/30 text-gray-300 border border-gray-500/50'
                               }`}>
                                 {prValidation.analysis.honest_review.tone.toUpperCase()}
                               </span>
                             </div>
                             
                             <div className="space-y-3 text-sm">
-                              <div className="p-2 bg-white rounded border-l-4 border-orange-500">
-                                <div className="font-medium text-orange-800 mb-1">Overall Verdict</div>
-                                <div className="text-orange-700">{prValidation.analysis.honest_review.overall_verdict}</div>
+                              <div className="p-2 bg-red-900/20 rounded border-l-4 border-red-500">
+                                <div className="font-medium text-red-300 mb-1">Overall Verdict</div>
+                                <div className="text-red-200">{prValidation.analysis.honest_review.overall_verdict}</div>
                               </div>
                               
-                              <div className="p-2 bg-white rounded">
-                                <div className="font-medium text-gray-800 mb-1">Code Quality</div>
-                                <div className="text-gray-700">{prValidation.analysis.honest_review.code_quality_roast}</div>
+                              <div className="p-2 bg-orange-900/20 rounded border-l-4 border-orange-500">
+                                <div className="font-medium text-orange-300 mb-1">Code Quality</div>
+                                <div className="text-orange-200">{prValidation.analysis.honest_review.code_quality_roast}</div>
                               </div>
                               
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                <div className="p-2 bg-green-50 rounded border-l-4 border-green-500">
-                                  <div className="font-medium text-green-800 mb-1">✅ What's Good</div>
-                                  <div className="text-green-700 text-xs">{prValidation.analysis.honest_review.what_they_did_right}</div>
+                                <div className="p-2 bg-green-900/20 rounded border-l-4 border-green-500">
+                                  <div className="font-medium text-green-300 mb-1">✅ What's Good</div>
+                                  <div className="text-green-200 text-xs">{prValidation.analysis.honest_review.what_they_did_right}</div>
                                 </div>
-                                <div className="p-2 bg-red-50 rounded border-l-4 border-red-500">
-                                  <div className="font-medium text-red-800 mb-1">❌ What's Wrong</div>
-                                  <div className="text-red-700 text-xs">{prValidation.analysis.honest_review.what_they_fucked_up}</div>
+                                <div className="p-2 bg-red-900/20 rounded border-l-4 border-red-500">
+                                  <div className="font-medium text-red-300 mb-1">❌ What's Wrong</div>
+                                  <div className="text-red-200 text-xs">{prValidation.analysis.honest_review.what_they_fucked_up}</div>
                                 </div>
                               </div>
                               
-                              <div className="p-3 bg-gradient-to-r from-orange-100 to-red-100 rounded border-2 border-orange-300">
-                                <div className="font-bold text-orange-900 mb-1">Final Verdict</div>
-                                <div className="text-orange-800 font-medium">{prValidation.analysis.honest_review.final_verdict}</div>
+                              <div className="p-3 bg-gradient-to-r from-red-900/30 to-orange-900/30 rounded border-2 border-red-500/50">
+                                <div className="font-bold text-red-200 mb-1">Final Verdict</div>
+                                <div className="text-red-100 font-medium">{prValidation.analysis.honest_review.final_verdict}</div>
                               </div>
                             </div>
                           </div>
@@ -644,17 +644,17 @@ export default function ClaimPage() {
                       </div>
                     )}
                     {typeof calculatedBounty === 'number' && (
-                      <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded text-sm text-green-800">
-                        <div className="font-medium mb-1">Estimated Bounty: ${calculatedBounty.toFixed(4)}</div>
+                      <div className="mt-2 p-3 bg-green-900/20 border border-green-500/50 rounded text-sm text-green-200">
+                        <div className="font-medium mb-1 text-green-100">Estimated Bounty: ${calculatedBounty.toFixed(4)}</div>
                         {bountyCalculation ? (
-                          <div className="text-xs text-green-700 mt-1">
+                          <div className="text-xs text-green-300 mt-1">
                             <div>Formula: {bountyCalculation.formula}</div>
                             {bountyCalculation.stepByStep && (
                               <div className="mt-1 font-mono">{bountyCalculation.stepByStep}</div>
                             )}
                           </div>
                         ) : prScore !== null ? (
-                          <div className="text-xs text-green-700 mt-1">
+                          <div className="text-xs text-green-300 mt-1">
                             <div>Formula: L + (D × score / 10) = ${project.lowestBounty} + (${(project.highestBounty - project.lowestBounty).toFixed(2)} × {prScore.toFixed(1)} / 10)</div>
                             <div className="mt-1 font-mono">= ${project.lowestBounty} + ${((project.highestBounty - project.lowestBounty) * prScore / 10).toFixed(4)} = ${(project.lowestBounty + (project.highestBounty - project.lowestBounty) * prScore / 10).toFixed(4)}</div>
                           </div>
@@ -662,7 +662,7 @@ export default function ClaimPage() {
                       </div>
                     )}
                     {prClaimStatus && prClaimStatus.isClaimed && (
-                      <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
+                      <div className="mt-2 p-3 bg-yellow-900/20 border border-yellow-500/50 rounded text-sm text-yellow-200">
                         This PR is already claimed{prClaimStatus.claimedAmount ? ` ($${prClaimStatus.claimedAmount})` : ''}.
                       </div>
                     )}
@@ -671,19 +671,19 @@ export default function ClaimPage() {
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Wallet Status</label>
                     {connected && account ? (
-                      <div className="p-3 bg-green-50 border border-green-200 rounded-md">
+                      <div className="p-3 bg-card/30 border rounded-md">
                         <div className="flex items-center gap-2">
-                          <Wallet className="h-4 w-4 text-green-600" />
-                          <span className="text-sm font-medium text-green-700">
+                          <Wallet className="h-4 w-4 text-primary" />
+                          <span className="text-sm font-medium">
                             Wallet Connected: {account.address.toString().slice(0, 6)}...{account.address.toString().slice(-4)}
                           </span>
                         </div>
                       </div>
                     ) : (
-                      <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                      <div className="p-3 bg-card/30 border rounded-md">
                         <div className="flex items-center gap-2">
-                          <AlertCircle className="h-4 w-4 text-yellow-600" />
-                          <span className="text-sm font-medium text-yellow-700">
+                          <AlertCircle className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm font-medium text-muted-foreground">
                             Please connect your wallet to submit the bounty claim
                           </span>
                         </div>
@@ -703,8 +703,8 @@ export default function ClaimPage() {
                     )}
                   </Button>
                   {withdrawalError && (
-                    <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-700 flex items-start gap-2">
-                      <XCircle className="h-4 w-4 mt-0.5" />
+                    <div className="mt-2 p-3 bg-red-900/20 border border-red-500/50 rounded text-sm text-red-200 flex items-start gap-2">
+                      <XCircle className="h-4 w-4 mt-0.5 text-red-400" />
                       <span>{withdrawalError}</span>
                     </div>
                   )}
