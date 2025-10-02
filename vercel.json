@@ -1,0 +1,9 @@
+{
+  "functions": {
+    "app/api/**/*.ts": {
+      "maxDuration": 30
+    }
+  },
+  "buildCommand": "pnpm prisma generate && next build",
+  "installCommand": "pnpm install"
+}

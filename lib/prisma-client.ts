@@ -14,9 +14,19 @@ export async function getPrisma() {
     const mod = await import('@prisma/client');
     PrismaClientCtor = (mod as unknown as { PrismaClient: any }).PrismaClient;
   }
+  
   const client = new PrismaClientCtor({
     log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+    // Ensure proper engine configuration for production
+    ...(process.env.NODE_ENV === 'production' && {
+      datasources: {
+        db: {
+          url: process.env.DATABASE_URL,
+        },
+      },
+    }),
   });
+  
   if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = client;
   return client;
 }

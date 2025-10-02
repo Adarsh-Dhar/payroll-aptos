@@ -20,6 +20,15 @@ const nextConfig = {
     'cacheable-request',
     'keyv',
   ],
+  experimental: {
+    serverComponentsExternalPackages: ['@prisma/client', 'prisma'],
+  },
+  webpack: (config, { isServer }) => {
+    if (isServer) {
+      config.externals.push('_http_common');
+    }
+    return config;
+  },
 }
 
 export default nextConfig
