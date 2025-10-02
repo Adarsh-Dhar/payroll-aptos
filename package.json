@@ -94,5 +94,7 @@
     "tw-animate-css": "1.3.3",
     "typescript": "^5"
   },
-  
+  "engines": {
+    "node": ">=18"
+  }
 }
