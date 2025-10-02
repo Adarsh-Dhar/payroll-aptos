@@ -4,6 +4,6 @@
       "maxDuration": 30
     }
   },
-  "buildCommand": "pnpm run vercel-build",
+  "buildCommand": "pnpm install && pnpm prisma generate && next build",
   "installCommand": "pnpm install"
 }
