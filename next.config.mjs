@@ -19,14 +19,6 @@ const nextConfig = {
     'cacheable-request',
     'keyv',
   ],
-  outputFileTracingIncludes: {
-    '/(api|app)/**': [
-      './node_modules/.prisma/client/libquery_engine*',
-      './node_modules/.prisma/client/schema.prisma',
-      './node_modules/@prisma/engines/**',
-      './node_modules/@prisma/client/**',
-    ],
-  },
 }
 
 export default nextConfig
