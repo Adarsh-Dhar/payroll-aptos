@@ -26,6 +26,11 @@ const nextConfig = {
   webpack: (config, { isServer }) => {
     if (isServer) {
       config.externals.push('_http_common');
+      // Ensure Prisma binaries are not bundled
+      config.externals.push({
+        '@prisma/client': '@prisma/client',
+        'prisma': 'prisma',
+      });
     }
     return config;
   },

@@ -17,11 +17,17 @@ export async function getPrisma() {
   
   const client = new PrismaClientCtor({
     log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
-    // Ensure proper engine configuration for production
+    // Force binary engine for production
     ...(process.env.NODE_ENV === 'production' && {
       datasources: {
         db: {
           url: process.env.DATABASE_URL,
+        },
+      },
+      // Explicitly set engine type for production
+      __internal: {
+        engine: {
+          binaryTargets: ['rhel-openssl-3.0.x'],
         },
       },
     }),
