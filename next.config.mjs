@@ -9,16 +9,21 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  experimental: {
-    serverComponentsExternalPackages: [
-      '@prisma/client',
-      'prisma',
-      // Aptos SDK and its node-only transitive deps used server-side
-      '@aptos-labs/ts-sdk',
-      '@aptos-labs/aptos-client',
-      'got',
-      'cacheable-request',
-      'keyv',
+  serverExternalPackages: [
+    '@prisma/client',
+    'prisma',
+    '@aptos-labs/ts-sdk',
+    '@aptos-labs/aptos-client',
+    'got',
+    'cacheable-request',
+    'keyv',
+  ],
+  outputFileTracingIncludes: {
+    '/api': [
+      './node_modules/.prisma/client/libquery_engine*',
+      './node_modules/.prisma/client/schema.prisma',
+      './node_modules/@prisma/engines/**',
+      './node_modules/@prisma/client/**',
     ],
   },
 }
