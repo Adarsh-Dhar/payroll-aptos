@@ -3,14 +3,15 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "prebuild": "prisma generate",
-    "build": "prisma generate && next build",
-    "predev": "prisma generate",
+    "prebuild": "pnpm prisma generate",
+    "build": "pnpm prisma generate && next build",
+    "predev": "pnpm prisma generate",
     "dev": "next dev",
+    "dev:wasm": "PRISMA_CLIENT_ENGINE_TYPE=wasm PORT=3001 next dev",
     "lint": "next lint",
     "start": "next start",
-    "postinstall": "prisma generate",
-    "db:generate": "prisma generate",
+    "postinstall": "pnpm prisma generate",
+    "db:generate": "pnpm prisma generate",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts"
   },
@@ -96,5 +97,6 @@
   },
   "engines": {
     "node": "22.x"
-  }
+  },
+  "packageManager": "pnpm@9.10.0+sha1.216899f511c8dfde183c7cb50b69009c779534a8"
 }

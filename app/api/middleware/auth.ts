@@ -1,29 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server';
+export const runtime = 'nodejs'
+import { getPrisma } from '@/lib/prisma';
 import { getToken } from 'next-auth/jwt';
 
-export async function authenticateAdmin(request: NextRequest) {
-  try {
-    // Dynamic import of Prisma client
-    const { prisma } = await import('@/lib/prisma');
+export type AuthenticateAdminResult =
+  | { success: true; admin: any }
+  | { success: false; error: string; status: number };
 
+export async function authenticateAdmin(request: NextRequest): Promise<AuthenticateAdminResult> {
+  try {
     // Allow secure local bypass via header when ADMIN_API_SECRET is set
     const adminApiSecret = process.env.ADMIN_API_SECRET;
     const bypassSecret = request.headers.get('x-admin-secret');
     const isBypassAllowed = process.env.NODE_ENV !== 'production' ? Boolean(bypassSecret) : (bypassSecret === adminApiSecret);
     if (isBypassAllowed) {
       const emailHeader = request.headers.get('x-admin-email') || 'devadmin@local.test';
-      let admin = await prisma.admin.findFirst({ where: { email: emailHeader } });
-      if (!admin) {
-        admin = await prisma.admin.create({
-          data: {
-            email: emailHeader,
-            name: emailHeader.split('@')[0],
-            password: `bypass-${Date.now()}`,
-            updatedAt: new Date(),
-          },
-        });
+      try {
+        const prisma = await getPrisma();
+        let admin = await prisma.admin.findFirst({ where: { email: emailHeader } });
+        if (!admin) {
+          admin = await prisma.admin.create({
+            data: {
+              email: emailHeader,
+              name: emailHeader.split('@')[0],
+              password: `bypass-${Date.now()}`,
+              updatedAt: new Date(),
+            },
+          });
+        }
+        return { success: true, admin };
+      } catch (e) {
+        console.error('authenticateAdmin bypass error:', e);
+        return { success: false, error: 'Bypass auth failed', status: 500 };
       }
-      return { success: true, admin };
     }
 
     // Get the token from the request
@@ -51,6 +60,9 @@ export async function authenticateAdmin(request: NextRequest) {
     }
 
     // Find or create admin record based on GitHub username
+    // Lazy import Prisma here as well
+    const prisma = await getPrisma();
+
     let admin = await prisma.admin.findFirst({
       where: {
         email: `${githubUsername}@github.com` // Use GitHub username as email
@@ -73,8 +85,8 @@ export async function authenticateAdmin(request: NextRequest) {
       success: true,
       admin
     };
-  } catch {
-    console.error('Authentication error');
+  } catch (e) {
+    console.error('Authentication error:', e);
     return {
       success: false,
       error: 'Authentication failed',
@@ -111,7 +123,7 @@ export async function authenticateDeveloper(request: NextRequest): Promise<NextR
       { success: false, message: 'JWT verification not implemented' },
       { status: 501 }
     );
-  } catch {
+  } catch (e) {
     return NextResponse.json(
       { success: false, message: 'Authentication error' },
       { status: 500 }

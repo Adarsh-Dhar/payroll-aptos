@@ -1,11 +1,22 @@
-import { PrismaClient } from '@prisma/client'
+// Minimal, robust loader that imports the already generated client directly
+// from .prisma/client to avoid bundling issues with @prisma/client stubs.
+const globalForPrisma = globalThis as unknown as { prisma: any | undefined };
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined
+export async function getPrisma() {
+  if (globalForPrisma.prisma) return globalForPrisma.prisma;
+  let PrismaClientCtor: any;
+  try {
+    // Import the generated client directly
+    const mod = await import('.prisma/client');
+    PrismaClientCtor = (mod as unknown as { PrismaClient: any }).PrismaClient;
+  } catch (directErr) {
+    // Fallback to package import
+    const mod = await import('@prisma/client');
+    PrismaClientCtor = (mod as unknown as { PrismaClient: any }).PrismaClient;
+  }
+  const client = new PrismaClientCtor({
+    log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+  });
+  if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = client;
+  return client;
 }
-
-export const prisma = globalForPrisma.prisma ?? new PrismaClient({
-  log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
-})
-
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma

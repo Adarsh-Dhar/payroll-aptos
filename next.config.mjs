@@ -12,6 +12,7 @@ const nextConfig = {
   },
   serverExternalPackages: [
     '@prisma/client',
+    '@prisma/client/wasm',
     'prisma',
     '@aptos-labs/ts-sdk',
     '@aptos-labs/aptos-client',

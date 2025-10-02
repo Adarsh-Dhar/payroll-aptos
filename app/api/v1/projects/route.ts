@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 import { z } from 'zod';
-import { authenticateAdmin } from '../../middleware/auth';
+import { authenticateAdmin, type AuthenticateAdminResult } from '../../middleware/auth';
+import { getPrisma } from '@/lib/prisma';
 
 const createProjectSchema = z.object({
   name: z.string().min(1),
@@ -33,8 +34,8 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const { page, limit, search, adminId, isActive, tags } = querySchema.parse(Object.fromEntries(searchParams));
 
-    // Dynamic import of Prisma client
-    const { prisma } = await import('@/lib/prisma');
+    // Get Prisma instance
+    const prisma = await getPrisma();
 
     // Build where clause
     const where: Record<string, unknown> = {};
@@ -91,7 +92,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: projects.map(project => ({
+      data: projects.map((project: any) => ({
         ...project,
         // Ensure bounty fields are included
         lowestBounty: project.lowestBounty || 100,
@@ -130,11 +131,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    // Dynamic import of Prisma client
-    const { prisma } = await import('@/lib/prisma');
-
     // Authenticate admin user
-    const authResult = await authenticateAdmin(request);
+    const authResult: AuthenticateAdminResult = await authenticateAdmin(request);
     
     if (!authResult.success) {
       return NextResponse.json(
@@ -142,6 +140,9 @@ export async function POST(request: NextRequest) {
         { status: authResult.status || 401 }
       );
     }
+
+    // Prisma instance after auth
+    const prisma = await getPrisma();
 
     const { admin } = authResult;
     if (!admin) {
@@ -237,7 +238,7 @@ export async function POST(request: NextRequest) {
           ) RETURNING *
         `;
         try {
-          const rowsNoBudget = await prisma.$queryRawUnsafe<unknown[]>(insertSqlNoBudget, ...paramsNoBudget);
+          const rowsNoBudget = await prisma.$queryRawUnsafe(insertSqlNoBudget, ...paramsNoBudget);
           const insertedNoBudget = rowsNoBudget && rowsNoBudget[0];
           if (insertedNoBudget) {
             const withAdminNoBudget = await prisma.project.findUnique({
@@ -292,7 +293,7 @@ export async function POST(request: NextRequest) {
           ) RETURNING *
         `;
 
-        const rows = await prisma.$queryRawUnsafe<unknown[]>(insertSql, ...params);
+        const rows = await prisma.$queryRawUnsafe(insertSql, ...params);
         const inserted = rows && rows[0];
         if (!inserted) throw e;
 
