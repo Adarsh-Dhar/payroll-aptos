@@ -11,6 +11,7 @@
     "lint": "next lint",
     "start": "next start",
     "postinstall": "pnpm prisma generate",
+    "vercel-build": "pnpm prisma generate && next build",
     "db:generate": "pnpm prisma generate",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts"

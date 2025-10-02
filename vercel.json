@@ -4,7 +4,7 @@
       "maxDuration": 30
     }
   },
-  "buildCommand": "pnpm prisma generate && next build",
+  "buildCommand": "pnpm install && pnpm prisma generate && next build",
   "installCommand": "pnpm install",
   "env": {
     "PRISMA_CLIENT_ENGINE_TYPE": "wasm"
