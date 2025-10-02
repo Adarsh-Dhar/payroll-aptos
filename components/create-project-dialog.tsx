@@ -64,24 +64,6 @@ export function CreateProjectDialog() {
 
 		setSubmitting(true)
 		try {
-			// Ensure contract is initialized (server uses deployer key)
-			try {
-				const initRes = await fetch('/api/v1/contract/initialize', { method: 'POST' })
-				const data = await initRes.json().catch(() => ({}))
-				if (!initRes.ok) {
-					console.warn('Contract initialization failed', data)
-					const extra = data?.details ? ` (details: ${JSON.stringify(data.details)})` : ''
-					if (data?.message?.includes('Deployer private key address does not match')) {
-						toast.error('Server initializer misconfigured: deployer key does not match contract address' + extra)
-					} else if (data?.message) {
-						toast.error(`Server initialization failed: ${data.message}` + extra)
-					}
-				} else if (data && data.initialized === false) {
-					toast.error('Server tried to initialize but contract is still not ready')
-				}
-			} catch (e) {
-				console.warn('Initialization request error', e)
-			}
 
 			// Step 1: Create project escrow on blockchain
 			const fundingAmountOctas = projectEscrowUtils.aptToOctas(Number(form.fundingAmount))

@@ -16,8 +16,6 @@ export interface UseProjectEscrowState {
   error: string | null;
   escrowVault: EscrowVault | null;
   autoProjectIdGenerator: AutoProjectIdGenerator | null;
-  vaultInitialized: boolean;
-  generatorInitialized: boolean;
   nextProjectId: number;
   totalProjects: number;
   totalBalance: number;
@@ -54,8 +52,6 @@ export const useProjectEscrow = (): UseProjectEscrowReturn => {
     error: null,
     escrowVault: null,
     autoProjectIdGenerator: null,
-    vaultInitialized: false,
-    generatorInitialized: false,
     nextProjectId: 0,
     totalProjects: 0,
     totalBalance: 0,
@@ -82,21 +78,14 @@ export const useProjectEscrow = (): UseProjectEscrowReturn => {
     try {
       setLoading(true);
       
-      // Check contract initialization status
-      const [isVaultInitialized, isGeneratorInitialized] = await Promise.all([
-        projectEscrowClient.isEscrowVaultInitialized(),
-        projectEscrowClient.isAutoProjectIdGeneratorInitialized()
+      // Get contract data
+      const [nextProjectId, totalProjects, totalBalance, escrowVault, autoProjectIdGenerator] = await Promise.all([
+        projectEscrowClient.getNextProjectId(),
+        projectEscrowClient.getTotalProjects(),
+        projectEscrowClient.getTotalBalance(),
+        projectEscrowClient.getEscrowVault(),
+        projectEscrowClient.getAutoProjectIdGenerator()
       ]);
-      
-      if (isVaultInitialized && isGeneratorInitialized) {
-        // Get contract data
-        const [nextProjectId, totalProjects, totalBalance, escrowVault, autoProjectIdGenerator] = await Promise.all([
-          projectEscrowClient.getNextProjectId(),
-          projectEscrowClient.getTotalProjects(),
-          projectEscrowClient.getTotalBalance(),
-          projectEscrowClient.getEscrowVault(),
-          projectEscrowClient.getAutoProjectIdGenerator()
-        ]);
 
         // Get project escrow data for each project
         const projectEscrows: ProjectEscrow[] = [];
@@ -127,28 +116,12 @@ export const useProjectEscrow = (): UseProjectEscrowReturn => {
           ...prev,
           escrowVault,
           autoProjectIdGenerator,
-          vaultInitialized: true,
-          generatorInitialized: true,
           nextProjectId,
           totalProjects,
           totalBalance,
           projectEscrows,
           error: null,
         }));
-      } else {
-        setState(prev => ({
-          ...prev,
-          escrowVault: null,
-          autoProjectIdGenerator: null,
-          vaultInitialized: isVaultInitialized,
-          generatorInitialized: isGeneratorInitialized,
-          nextProjectId: 0,
-          totalProjects: 0,
-          totalBalance: 0,
-          projectEscrows: [],
-          error: null,
-        }));
-      }
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Failed to refresh contract data');
     } finally {

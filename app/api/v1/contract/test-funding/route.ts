@@ -21,22 +21,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if contract is initialized
-    const [isVaultInitialized, isGeneratorInitialized] = await Promise.all([
-      projectEscrowClient.isEscrowVaultInitialized(),
-      projectEscrowClient.isAutoProjectIdGeneratorInitialized()
-    ]);
-    
-    if (!isVaultInitialized || !isGeneratorInitialized) {
-      return NextResponse.json(
-        { 
-          success: false, 
-          message: 'Contract not fully initialized at the specified address',
-          details: { isVaultInitialized, isGeneratorInitialized }
-        },
-        { status: 400 }
-      );
-    }
+    // Contract is assumed to be initialized
 
     // For testing purposes, we'll simulate funding by checking if we can get project data
     // In real implementation, this would call the actual contract
@@ -57,7 +42,7 @@ export async function POST(request: NextRequest) {
           amountInApt,
           amountInOctas: projectEscrowUtils.aptToOctas(amountInApt),
           transactionHash: fundingResult.transactionHash,
-          contractStatus: { isVaultInitialized, isGeneratorInitialized, totalBalance, nextProjectId }
+          contractStatus: { totalBalance, nextProjectId }
         },
         message: 'Contract funding test completed successfully'
       });
@@ -113,7 +98,7 @@ export async function GET(request: NextRequest) {
       success: true,
       data: {
         contractAddress,
-        contractStatus: { isVaultInitialized, isGeneratorInitialized, totalBalance, nextProjectId },
+        contractStatus: { totalBalance, nextProjectId },
         formattedAddress: projectEscrowUtils.formatAddress(contractAddress)
       }
     });

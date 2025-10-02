@@ -5,7 +5,6 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Shield, Wallet } from "lucide-react"
 import { CreateProjectDialog } from "@/components/create-project-dialog"
-import { InitializeVaultButton } from "@/components/initialize-vault-button"
 import { projectEscrowClient, projectEscrowUtils } from "@/lib/contract"
 import { useEffect, useState } from "react"
 import { useSession, signIn } from "next-auth/react"
@@ -77,8 +76,6 @@ interface ProjectEscrowData {
 
 // Contract status interface
 interface ContractStatus {
-  isVaultInitialized: boolean
-  isGeneratorInitialized: boolean
   nextProjectId: number
   totalProjects: number
   totalBalance: number
@@ -111,8 +108,6 @@ export default function Page() {
 			
 			const totalBalance = await projectEscrowClient.getTotalBalance()
 			const contractStatus: ContractStatus = {
-				isVaultInitialized: nextProjectId > 0,
-				isGeneratorInitialized: autoGenerator !== null,
 				nextProjectId: nextProjectId || 1,
 				totalProjects: totalProjects || 0,
 				totalBalance: totalBalance || 0
@@ -250,14 +245,6 @@ export default function Page() {
 								</div>
 								<div className="flex items-center gap-2">
 									<CreateProjectDialog />
-									<InitializeVaultButton 
-										isVaultInitialized={contractData?.contractStatus?.isVaultInitialized || false}
-										isGeneratorInitialized={contractData?.contractStatus?.isGeneratorInitialized || false}
-										onInitialized={() => {
-											// Refresh contract data after initialization
-											getContractData()
-										}}
-									/>
 								</div>
 							</div>
 

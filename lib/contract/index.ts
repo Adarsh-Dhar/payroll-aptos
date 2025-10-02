@@ -563,29 +563,9 @@ export class ProjectEscrowContractClient {
       // Convert APT to octas
       const amountInOctas = projectEscrowUtils.aptToOctas(amountInApt);
 
-      // Ensure initialization; if missing, request server to initialize with deployer key
-      let isVaultInitialized = await this.isEscrowVaultInitialized();
-      let isGeneratorInitialized = await this.isAutoProjectIdGeneratorInitialized();
-
-      if (!isVaultInitialized || !isGeneratorInitialized) {
-        try {
-          const resp = await fetch('/api/v1/contract/initialize', { method: 'POST' });
-          if (!resp.ok) {
-            const data = await resp.json().catch(() => ({}));
-            console.warn('Server initialize failed', data);
-          } else {
-            const data = await resp.json().catch(() => ({}));
-            if (!data?.initialized) {
-              console.warn('Server initialize did not complete', data);
-            }
-          }
-        } catch {
-          // ignore fetch errors, we'll rely on re-check
-        }
-        // Re-check after initialization
-        isVaultInitialized = await this.isEscrowVaultInitialized();
-        isGeneratorInitialized = await this.isAutoProjectIdGeneratorInitialized();
-      }
+      // Check initialization status
+      const isVaultInitialized = await this.isEscrowVaultInitialized();
+      const isGeneratorInitialized = await this.isAutoProjectIdGeneratorInitialized();
 
       if (!isVaultInitialized || !isGeneratorInitialized) {
         const reason = !isVaultInitialized
