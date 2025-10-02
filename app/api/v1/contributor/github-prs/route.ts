@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '../../../auth/[...nextauth]/route'
-import { PrismaClient } from '@prisma/client'
 
 export async function GET(request: NextRequest) {
   try {
@@ -104,7 +103,7 @@ export async function GET(request: NextRequest) {
     // Check database for existing claimed PRs to merge with GitHub data
     let existingPRs: unknown[] = [];
     try {
-      const prisma = new PrismaClient();
+      const { prisma } = await import('@/lib/prisma');
       existingPRs = await prisma.pullRequest.findMany({
         where: {
           OR: githubData.items.map((item: unknown) => {

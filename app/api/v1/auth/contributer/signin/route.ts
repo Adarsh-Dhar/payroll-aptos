@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { prisma } from '@/lib/prisma';
 
 const signinSchema = z.object({
   githubId: z.string().min(1),
@@ -13,6 +12,9 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { githubId, username, email, password } = signinSchema.parse(body);
+
+    // Dynamic import of Prisma client
+    const { prisma } = await import('@/lib/prisma');
 
     // Check if contributor already exists
     const existingContributor = await prisma.developer.findUnique({

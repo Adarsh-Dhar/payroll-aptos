@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
 
 export async function GET(
   request: NextRequest,
@@ -15,6 +14,9 @@ export async function GET(
         { status: 400 }
       );
     }
+
+    // Dynamic import of Prisma client
+    const { prisma } = await import('@/lib/prisma');
 
     const developer = await prisma.developer.findUnique({
       where: { id: developerIdNum },

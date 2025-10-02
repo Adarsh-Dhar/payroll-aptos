@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { prisma } from '@/lib/prisma';
-
 const createPayoutSchema = z.object({
   developerId: z.number().int().positive(),
   amount: z.number().positive(),

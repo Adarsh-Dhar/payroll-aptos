@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '../../../../auth/[...nextauth]/route';
-import { PrismaClient } from '@prisma/client';
 
 export async function POST(request: NextRequest) {
   try {
@@ -56,7 +55,7 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    const prisma = new PrismaClient();
+    const { prisma } = await import('@/lib/prisma');
     let project = null;
     let lowestBounty = 0.01;
     let highestBounty = 0.10;

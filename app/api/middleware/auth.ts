@@ -1,20 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
-import { PrismaClient } from '@prisma/client';
-
-// Reuse a single Prisma client instance in dev to avoid connection issues
-declare global {
-  // eslint-disable-next-line no-var
-  var prisma: PrismaClient | undefined;
-}
-
-const prisma = global.prisma || new PrismaClient();
-if (process.env.NODE_ENV !== 'production') {
-  global.prisma = prisma;
-}
 
 export async function authenticateAdmin(request: NextRequest) {
   try {
+    // Dynamic import of Prisma client
+    const { prisma } = await import('@/lib/prisma');
+
     // Get the token from the request
     const token = await getToken({ 
       req: request, 

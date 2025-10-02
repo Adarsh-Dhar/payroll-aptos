@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '../../../../auth/[...nextauth]/route';
-import { PrismaClient } from '@prisma/client';
 
 export async function POST(request: NextRequest) {
-  // Initialize Prisma client at the top level
-  const prisma = new PrismaClient();
+  // Dynamic import of Prisma client
+  const { prisma } = await import('@/lib/prisma');
   
   try {
     console.log('=== MARK PR AS CLAIMED REQUEST ===');

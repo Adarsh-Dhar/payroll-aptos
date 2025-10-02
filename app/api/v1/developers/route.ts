@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { prisma } from '@/lib/prisma';
-
 const createDeveloperSchema = z.object({
   githubId: z.string().min(1),
   username: z.string().min(1),

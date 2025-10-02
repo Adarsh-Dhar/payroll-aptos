@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { prisma } from '@/lib/prisma';
-
 const querySchema = z.object({
   page: z.string().transform(Number).pipe(z.number().min(1)).default('1'),
   limit: z.string().transform(Number).pipe(z.number().min(1).max(100)).default('20'),

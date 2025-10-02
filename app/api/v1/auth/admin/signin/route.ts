@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { prisma } from '@/lib/prisma';
 
 const signinSchema = z.object({
   email: z.string().email(),
@@ -12,6 +11,9 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { email, password, name } = signinSchema.parse(body);
+
+    // Dynamic import of Prisma client
+    const { prisma } = await import('@/lib/prisma');
 
     // Check if admin already exists
     const existingAdmin = await prisma.admin.findUnique({

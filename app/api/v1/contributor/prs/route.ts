@@ -1,18 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { PrismaClient } from '@prisma/client';
-
-// Declare global type for Prisma client
-declare global {
-  var prisma: PrismaClient | undefined;
-}
-
-// Create a singleton Prisma client instance
-const prisma = global.prisma || new PrismaClient();
-
-if (process.env.NODE_ENV !== 'production') {
-  global.prisma = prisma;
-}
 
 const querySchema = z.object({
   page: z.string().transform(Number).pipe(z.number().min(1)).default('1'),
@@ -27,6 +14,8 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const { page, limit, merged, search, projectId } = querySchema.parse(Object.fromEntries(searchParams));
 
+    // Dynamic import of Prisma client
+    const { prisma } = await import('@/lib/prisma');
 
     const mockDeveloperId = 1;
 

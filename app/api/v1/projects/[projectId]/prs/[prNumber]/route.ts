@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { prisma } from '@/lib/prisma';
-
 const updatePRSchema = z.object({
   title: z.string().min(1).optional(),
   description: z.string().optional(),

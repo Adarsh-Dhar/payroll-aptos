@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { prisma } from '@/lib/prisma';
-
 const createPRSchema = z.object({
   prNumber: z.number().positive(),
   title: z.string().min(1),

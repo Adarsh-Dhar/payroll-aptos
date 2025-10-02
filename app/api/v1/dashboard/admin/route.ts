@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
 
 export async function GET() {
   try {
     // TODO: Implement admin authentication middleware
+    
+    // Dynamic import of Prisma client
+    const { prisma } = await import('@/lib/prisma');
     
     const now = new Date();
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);

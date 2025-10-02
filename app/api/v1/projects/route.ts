@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { prisma } from '@/lib/prisma';
 import { authenticateAdmin } from '../../middleware/auth';
 
 const createProjectSchema = z.object({
@@ -31,6 +30,9 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const { page, limit, search, adminId, isActive, tags } = querySchema.parse(Object.fromEntries(searchParams));
+
+    // Dynamic import of Prisma client
+    const { prisma } = await import('@/lib/prisma');
 
     // Build where clause
     const where: Record<string, unknown> = {};
@@ -126,6 +128,9 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    // Dynamic import of Prisma client
+    const { prisma } = await import('@/lib/prisma');
+
     // Authenticate admin user
     const authResult = await authenticateAdmin(request);
     
