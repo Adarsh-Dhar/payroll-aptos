@@ -133,6 +133,8 @@ export async function POST(request: NextRequest) {
   try {
     // Authenticate admin user
     const authResult: AuthenticateAdminResult = await authenticateAdmin(request);
+
+    console.log('authResult', authResult);
     
     if (!authResult.success) {
       return NextResponse.json(
