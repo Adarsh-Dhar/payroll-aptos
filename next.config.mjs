@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: 'standalone',
   eslint: {
     ignoreDuringBuilds: true,
   },
@@ -19,7 +20,7 @@ const nextConfig = {
     'keyv',
   ],
   outputFileTracingIncludes: {
-    '/api': [
+    '/(api|app)/**': [
       './node_modules/.prisma/client/libquery_engine*',
       './node_modules/.prisma/client/schema.prisma',
       './node_modules/@prisma/engines/**',
