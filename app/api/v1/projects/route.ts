@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
     const { page, limit, search, adminId, isActive, tags } = querySchema.parse(Object.fromEntries(searchParams));
 
     // Get Prisma instance
-    const prisma = await getPrisma();
+    const prisma = getPrisma();
 
     // Build where clause
     const where: Record<string, unknown> = {};
@@ -144,7 +144,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Prisma instance after auth
-    const prisma = await getPrisma();
+    const prisma = getPrisma();
 
     const { admin } = authResult;
     if (!admin) {
