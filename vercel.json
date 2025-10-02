@@ -1,9 +1,4 @@
 {
-  "buildCommand": "pnpm prisma generate && pnpm build",
-  "functions": {
-    "*": {
-      "includeFiles": "node_modules/.prisma/**"
-    }
-  }
+  "buildCommand": "pnpm prisma generate && pnpm build"
 }
 
