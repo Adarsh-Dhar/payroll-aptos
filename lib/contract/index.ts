@@ -6,11 +6,11 @@ import {
   Aptos, 
   AptosConfig, 
   Network, 
-  NetworkToNetworkName,
+  // NetworkToNetworkName,
   InputGenerateTransactionPayloadData,
-  TypeTag,
-  SimpleTransaction,
-  PendingTransactionResponse,
+  // TypeTag,
+  // SimpleTransaction,
+  // PendingTransactionResponse,
   TransactionResponse
 } from "@aptos-labs/ts-sdk";
 import dotenv from "dotenv";
@@ -113,7 +113,7 @@ export class ProjectEscrowContractClient {
    */
   async initializeWithWallet(
     accountAddress: string,
-    signAndSubmitTransaction: (transaction: any) => Promise<any>
+    signAndSubmitTransaction: (transaction: unknown) => Promise<unknown>
   ): Promise<TransactionResponse> {
     const transactionData = {
       data: {
@@ -285,7 +285,7 @@ export class ProjectEscrowContractClient {
         return Number(response[0]);
       }
       return 0;
-    } catch (error) {
+    } catch {
       return 0;
     }
   }
@@ -309,7 +309,7 @@ export class ProjectEscrowContractClient {
         return response[0] as string;
       }
       return null;
-    } catch (error) {
+    } catch {
       return null;
     }
   }
@@ -335,7 +335,7 @@ export class ProjectEscrowContractClient {
         return String.fromCharCode(...bytes);
       }
       return null;
-    } catch (error) {
+    } catch {
       return null;
     }
   }
@@ -359,7 +359,7 @@ export class ProjectEscrowContractClient {
         return response[0] as boolean;
       }
       return false;
-    } catch (error) {
+    } catch {
       return false;
     }
   }
@@ -382,7 +382,7 @@ export class ProjectEscrowContractClient {
         return Number(response[0]);
       }
       return 0;
-    } catch (error) {
+    } catch {
       return 0;
     }
   }
@@ -405,7 +405,7 @@ export class ProjectEscrowContractClient {
         return Number(response[0]);
       }
       return 0;
-    } catch (error) {
+    } catch {
       return 0;
     }
   }
@@ -428,7 +428,7 @@ export class ProjectEscrowContractClient {
         return Number(response[0]);
       }
       return 0;
-    } catch (error) {
+    } catch {
       return 0;
     }
   }
@@ -444,7 +444,7 @@ export class ProjectEscrowContractClient {
         resourceType: `${this.contractAddress}::${this.contractModule}::EscrowVault`,
       });
       return resource.data as EscrowVault;
-    } catch (error) {
+    } catch {
       return null;
     }
   }
@@ -460,7 +460,7 @@ export class ProjectEscrowContractClient {
         resourceType: `${this.contractAddress}::${this.contractModule}::AutoProjectIdGenerator`,
       });
       return resource.data as AutoProjectIdGenerator;
-    } catch (error) {
+    } catch {
       return null;
     }
   }
@@ -476,7 +476,7 @@ export class ProjectEscrowContractClient {
         resourceType: `${this.contractAddress}::${this.contractModule}::EscrowVault`,
       });
       return true;
-    } catch (error) {
+    } catch {
       return false;
     }
   }
@@ -492,7 +492,7 @@ export class ProjectEscrowContractClient {
         resourceType: `${this.contractAddress}::${this.contractModule}::AutoProjectIdGenerator`,
       });
       return true;
-    } catch (error) {
+    } catch {
       return false;
     }
   }
@@ -538,7 +538,7 @@ export class ProjectEscrowContractClient {
         transactionHash: result.hash
       };
 
-    } catch (error) {
+    } catch {
       console.error('Error creating and funding project:', error);
       return {
         success: false,
@@ -556,7 +556,7 @@ export class ProjectEscrowContractClient {
    */
   async createAndFundProjectWithWallet(
     accountAddress: string,
-    signAndSubmitTransaction: (transaction: any) => Promise<any>,
+    signAndSubmitTransaction: (transaction: unknown) => Promise<unknown>,
     amountInApt: number
   ): Promise<{ success: boolean; transactionHash?: string; error?: string }> {
     try {
@@ -579,7 +579,7 @@ export class ProjectEscrowContractClient {
               console.warn('Server initialize did not complete', data);
             }
           }
-        } catch (_) {
+        } catch {
           // ignore fetch errors, we'll rely on re-check
         }
         // Re-check after initialization
@@ -622,7 +622,7 @@ export class ProjectEscrowContractClient {
         transactionHash: result.hash
       };
 
-    } catch (error) {
+    } catch {
       console.error('Error creating and funding project with wallet:', error);
       return {
         success: false,
@@ -641,7 +641,7 @@ export class ProjectEscrowContractClient {
    */
   async fundProjectWithWallet(
     accountAddress: string,
-    signAndSubmitTransaction: (transaction: any) => Promise<any>,
+    signAndSubmitTransaction: (transaction: unknown) => Promise<unknown>,
     projectId: number,
     amountInApt: number
   ): Promise<{ success: boolean; transactionHash?: string; error?: string }> {
@@ -686,7 +686,7 @@ export class ProjectEscrowContractClient {
         transactionHash: result.hash
       };
 
-    } catch (error) {
+    } catch {
       console.error('Error funding project with wallet:', error);
       return {
         success: false,
@@ -705,7 +705,7 @@ export class ProjectEscrowContractClient {
    */
   async withdrawFromProjectWithWallet(
     accountAddress: string,
-    signAndSubmitTransaction: (transaction: any) => Promise<any>,
+    signAndSubmitTransaction: (transaction: unknown) => Promise<unknown>,
     projectId: number,
     amountInApt: number
   ): Promise<{ success: boolean; transactionHash?: string; error?: string }> {
@@ -758,7 +758,7 @@ export class ProjectEscrowContractClient {
         transactionHash: result.hash
       };
 
-    } catch (error) {
+    } catch {
       console.error('Error withdrawing from project with wallet:', error);
       return {
         success: false,
@@ -797,7 +797,7 @@ export class ProjectEscrowContractClient {
         owner
       };
 
-    } catch (error) {
+    } catch {
       console.error('Error getting project funding status:', error);
       return {
         exists: false,

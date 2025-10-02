@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
     
 
     // Get the access token from the session
-    const accessToken = (session as any).accessToken
+    const accessToken = (session as { accessToken?: string }).accessToken
     
     if (!accessToken) {
       return NextResponse.json(
@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
 
     // Get the GitHub username from the session or query params
     const { searchParams } = new URL(request.url)
-    let username = searchParams.get('username')
+    const username = searchParams.get('username')
     
     if (!username) {
       return NextResponse.json(
@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
 
     // Extract the actual GitHub username from the session user data
     // The session might have "Adarsh Dhar" but we need "Adarsh-Dhar"
-    const sessionUser = session.user as any
+    const sessionUser = session.user as { githubUsername?: string; login?: string; name?: string }
     let githubUsername = username
     
     // If the session has a GitHub-related field, use that instead
@@ -94,27 +94,27 @@ export async function GET(request: NextRequest) {
     }
 
     // List of repositories that have bounty enabled
-    const bountyEnabledRepos = [
-      'devpaystream',
-      'devpay',
-      'Adarsh-Dhar/Project-S', // Your specific repository
-      'Project-S' // Also check for just the project name
-    ];
+    // const bountyEnabledRepos = [
+    //   'devpaystream',
+    //   'devpay',
+    //   'Adarsh-Dhar/Project-S', // Your specific repository
+    //   'Project-S' // Also check for just the project name
+    // ];
     
     // Check database for existing claimed PRs to merge with GitHub data
-    let existingPRs: any[] = [];
+    let existingPRs: unknown[] = [];
     try {
       const prisma = new PrismaClient();
       existingPRs = await prisma.pullRequest.findMany({
         where: {
-          OR: githubData.items.map((item: any) => {
-            const repoUrlParts = item.repository_url.split('/');
+          OR: githubData.items.map((item: unknown) => {
+            const repoUrlParts = (item as { repository_url: string }).repository_url.split('/');
             const repoOwner = repoUrlParts[repoUrlParts.length - 2];
             const repoName = repoUrlParts[repoUrlParts.length - 1];
             const repoFullName = `${repoOwner}/${repoName}`;
             return {
               AND: [
-                { prNumber: item.number },
+                { prNumber: (item as { number: number }).number },
                 {
                   OR: [
                     { linkedIssue: { contains: repoFullName } },
@@ -141,15 +141,13 @@ export async function GET(request: NextRequest) {
             }
           }
         }
-      });
-      await prisma.$disconnect();
-    } catch (error) {
+      });} catch {
     }
 
     // Transform GitHub data to match our expected format
-    const transformedPRs = githubData.items.map((item: any, index: number) => {
+    const transformedPRs = githubData.items.map((item: unknown, index: number) => {
       // Extract repository information from the repository_url
-      const repoUrlParts = item.repository_url.split('/')
+      const repoUrlParts = (item as { repository_url: string }).repository_url.split('/')
       const repoOwner = repoUrlParts[repoUrlParts.length - 2]
       const repoName = repoUrlParts[repoUrlParts.length - 1]
       const repoFullName = `${repoOwner}/${repoName}`
@@ -158,13 +156,13 @@ export async function GET(request: NextRequest) {
       let bountyAmount = 0
       let projectHasBounty = false
       
-      if (item.repository_url) {
+        if ((item as { repository_url?: string }).repository_url) {
         // Check if this repository is registered in any project
-        const projectName = repoFullName
+        // const projectName = repoFullName
         
         // Only projects in database have bounty enabled
         if (existingPRs.length > 0) {
-          const existingPR = existingPRs.find(epr => epr.prNumber === item.number);
+          const existingPR = existingPRs.find(epr => (epr as { prNumber: number }).prNumber === (item as { number: number }).number);
           if (existingPR && existingPR.Project) {
             projectHasBounty = true
             // Bounty amount will be calculated by the contribution API
@@ -174,15 +172,15 @@ export async function GET(request: NextRequest) {
       }
       
       const transformed = {
-        id: `github-${item.id}-${index}`, // Use GitHub PR ID + index for unique ID
-        prNumber: item.number,
-        title: item.title,
-        description: item.body || '',
+        id: `github-${(item as { id: number }).id}-${index}`, // Use GitHub PR ID + index for unique ID
+        prNumber: (item as { number: number }).number,
+        title: (item as { title: string }).title,
+        description: (item as { body?: string }).body || '',
         additions: 0, // GitHub API doesn't provide this in search results
         deletions: 0, // GitHub API doesn't provide this in search results
         hasTests: false, // Would need additional API calls to determine this
-        linkedIssue: item.html_url,
-        merged: item.state === 'closed',
+        linkedIssue: (item as { html_url: string }).html_url,
+        merged: (item as { state: string }).state === 'closed',
         score: 0, // Would need additional logic to calculate
         amountPaid: 0, // Not applicable for GitHub data
         bountyAmount: bountyAmount, // Will be calculated based on project bounty settings
@@ -192,8 +190,8 @@ export async function GET(request: NextRequest) {
         bountyClaimedAmount: null, // Will be checked from database
         developerId: 1, // Default value
         projectId: 1, // Default value
-        createdAt: item.created_at,
-        updatedAt: item.updated_at,
+        createdAt: (item as { created_at: string }).created_at,
+        updatedAt: (item as { updated_at: string }).updated_at,
         repository: repoFullName, // Add repository field with owner/repo format
         Project: {
           id: 1,
@@ -217,7 +215,7 @@ export async function GET(request: NextRequest) {
       
       
       // Check if this PR exists in our database and merge the claimed status
-      const existingPR = existingPRs.find(epr => epr.prNumber === item.number);
+      const existingPR = existingPRs.find(epr => (epr as { prNumber: number }).prNumber === (item as { number: number }).number);
       if (existingPR) {
         transformed.bountyClaimed = existingPR.bountyClaimed;
         transformed.bountyClaimedAt = existingPR.bountyClaimedAt;
@@ -251,8 +249,8 @@ export async function GET(request: NextRequest) {
     // Calculate stats
     const stats = {
       totalPRs: githubData.total_count,
-      mergedPRs: transformedPRs.filter((pr: any) => pr.merged).length,
-      openPRs: transformedPRs.filter((pr: any) => !pr.merged).length,
+      mergedPRs: transformedPRs.filter((pr: unknown) => (pr as { merged: boolean }).merged).length,
+      openPRs: transformedPRs.filter((pr: unknown) => !(pr as { merged: boolean }).merged).length,
       totalEarnings: 0, // Not applicable for GitHub data
       averageScore: 0 // Not applicable for GitHub data
     }
@@ -275,7 +273,7 @@ export async function GET(request: NextRequest) {
     // Log unique IDs to check for duplicates
     if (false) {
       console.warn('⚠️ Duplicate IDs detected!')
-      const duplicates = ids.filter((id: any, index: number) => ids.indexOf(id) !== index)
+      const duplicates = ids.filter((id: unknown, index: number) => ids.indexOf(id) !== index)
       console.warn('Duplicate IDs:', duplicates)
     }
 

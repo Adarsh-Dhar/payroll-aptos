@@ -160,7 +160,7 @@ export async function POST(req: NextRequest) {
       try {
         const repoJson = await repoResponse.json();
         repoPrimaryLanguage = (repoJson && typeof repoJson.language === 'string') ? repoJson.language : null;
-      } catch (_) {
+      } catch {
         repoPrimaryLanguage = null;
       }
     } catch (error) {
@@ -226,7 +226,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Fetch issue comments if this PR references an issue
-    let issueCommentsData: any[] = [];
+    const issueCommentsData: unknown[] = [];
     // if (issueData) {
     //   const issueNumber = issueData.number;
     //   const issueCommentsResponse = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues/${issueNumber}/comments`, { headers });
@@ -259,7 +259,7 @@ export async function POST(req: NextRequest) {
         if (issueResponse.ok) {
           issueData = await issueResponse.json();
         }
-      } catch (error) {
+      } catch {
         console.log('Failed to fetch linked issue, continuing without it');
       }
     }
@@ -286,7 +286,7 @@ export async function POST(req: NextRequest) {
       issue: issueData ? {
         title: issueData.title,
         body: issueData.body,
-        labels: issueData.labels?.map((label: any) => label.name) || [],
+        labels: issueData.labels?.map((label: unknown) => (label as { name: string }).name) || [],
         comments_count: issueData.comments || 0
       } : null,
       files: filesData.map(file => ({
@@ -306,43 +306,43 @@ export async function POST(req: NextRequest) {
         author: commit.commit.author.name,
         date: commit.commit.author.date
       })),
-      reviews: reviewsData.map((review: any) => ({
-        id: review.id,
-        user: review.user.login,
-        state: review.state, // APPROVED, REQUEST_CHANGES, COMMENTED
-        submitted_at: review.submitted_at,
-        body: review.body
+      reviews: reviewsData.map((review: unknown) => ({
+        id: (review as { id: number }).id,
+        user: (review as { user: { login: string } }).user.login,
+        state: (review as { state: string }).state, // APPROVED, REQUEST_CHANGES, COMMENTED
+        submitted_at: (review as { submitted_at: string }).submitted_at,
+        body: (review as { body: string }).body
       })),
-      review_comments: reviewCommentsData.map((comment: any) => ({
-        id: comment.id,
-        user: comment.user.login,
-        body: comment.body,
-        created_at: comment.created_at,
-        updated_at: comment.updated_at,
-        path: comment.path,
-        line: comment.line
+      review_comments: reviewCommentsData.map((comment: unknown) => ({
+        id: (comment as { id: number }).id,
+        user: (comment as { user: { login: string } }).user.login,
+        body: (comment as { body: string }).body,
+        created_at: (comment as { created_at: string }).created_at,
+        updated_at: (comment as { updated_at: string }).updated_at,
+        path: (comment as { path: string }).path,
+        line: (comment as { line: number }).line
       })),
       ci_status: {
-        statuses: statusData.map((status: any) => ({
-          state: status.state, // success, failure, pending, error
-          context: status.context,
-          description: status.description,
-          created_at: status.created_at
+        statuses: statusData.map((status: unknown) => ({
+          state: (status as { state: string }).state, // success, failure, pending, error
+          context: (status as { context: string }).context,
+          description: (status as { description: string }).description,
+          created_at: (status as { created_at: string }).created_at
         })),
-        check_runs: checkRunsData.check_runs.map((run: any) => ({
-          name: run.name,
-          status: run.status, // completed, in_progress, queued
-          conclusion: run.conclusion, // success, failure, cancelled, neutral, skipped
-          started_at: run.started_at,
-          completed_at: run.completed_at
+        check_runs: checkRunsData.check_runs.map((run: unknown) => ({
+          name: (run as { name: string }).name,
+          status: (run as { status: string }).status, // completed, in_progress, queued
+          conclusion: (run as { conclusion: string }).conclusion, // success, failure, cancelled, neutral, skipped
+          started_at: (run as { started_at: string }).started_at,
+          completed_at: (run as { completed_at: string }).completed_at
         }))
       },
       metrics: {
         // Calculate some basic metrics for the AI
         total_comments: reviewCommentsData.length,
         review_count: reviewsData.length,
-        approval_count: reviewsData.filter((r: any) => r.state === 'APPROVED').length,
-        change_request_count: reviewsData.filter((r: any) => r.state === 'CHANGES_REQUESTED').length,
+        approval_count: reviewsData.filter((r: unknown) => (r as { state: string }).state === 'APPROVED').length,
+        change_request_count: reviewsData.filter((r: unknown) => (r as { state: string }).state === 'CHANGES_REQUESTED').length,
         // Time calculations
         time_to_first_review: reviewsData.length > 0 ? 
           new Date(reviewsData[0].submitted_at).getTime() - new Date(prData.created_at).getTime() : null,
@@ -362,7 +362,7 @@ export async function POST(req: NextRequest) {
     const repo_context = {
       critical_files,
       file_dependencies: Object.fromEntries((filesData || []).map(f => [f.filename, [] as string[]])),
-      linked_issues: issueData ? [{ id: issueData.id, title: issueData.title, labels: (issueData.labels || []).map((l: any) => typeof l === 'string' ? l : l.name).filter(Boolean) }] : [],
+      linked_issues: issueData ? [{ id: issueData.id, title: issueData.title, labels: (issueData.labels || []).map((l: unknown) => typeof l === 'string' ? l : (l as { name: string }).name).filter(Boolean) }] : [],
       repo_metrics: {
         overall_test_coverage: null as unknown as string | null,
         primary_language: repoPrimaryLanguage || null
@@ -514,7 +514,7 @@ function parsePrUrl(url: string): { owner: string; repo: string; prNumber: strin
     if (pullIndex >= 2 && parts[pullIndex + 1]) {
       return { owner: parts[0], repo: parts[1], prNumber: parts[pullIndex + 1] };
     }
-  } catch (_) {
+  } catch {
     // Fallback simple parse
     const parts = url.split('/').filter(Boolean);
     const pullIndex = parts.findIndex(p => p === 'pull' || p === 'pulls');
@@ -530,7 +530,7 @@ function parseRepoUrl(url: string): { owner: string; repo: string } {
     const u = new URL(url);
     const parts = u.pathname.split('/').filter(Boolean);
     if (parts.length >= 2) return { owner: parts[0], repo: parts[1] };
-  } catch (_) {
+  } catch {
     const parts = url.split('/').filter(Boolean);
     const idx = parts.findIndex(p => p.includes('github.com'));
     if (idx >= 0 && parts[idx + 1] && parts[idx + 2]) return { owner: parts[idx + 1], repo: parts[idx + 2] };
@@ -574,12 +574,12 @@ function getFileTypeBreakdown(files: GitHubFile[]) {
 function computeMetricScores(input: {
   pr: GitHubPR;
   commits: GitHubCommit[];
-  reviews: any[];
-  reviewComments: any[];
-  issueComments: any[];
+  reviews: unknown[];
+  reviewComments: unknown[];
+  issueComments: unknown[];
   files: GitHubFile[];
-  statuses: any[];
-  checkRuns: any[];
+  statuses: unknown[];
+  checkRuns: unknown[];
 }): PRAnalysis['metric_scores'] {
   const { pr, reviews, reviewComments, issueComments, files, statuses, checkRuns } = input;
 
@@ -640,9 +640,9 @@ function computeMetricScores(input: {
   else if (totalReviewComments > 15 || changesRequested > 1) reviewDepthScore = 3;
 
   // Code quality / bot presence (CI, bots, tests)
-  const anyFailedStatus = (statuses || []).some((s: any) => ['failure', 'error'].includes((s.state || '').toLowerCase()));
-  const anyFailedCheck = (checkRuns || []).some((r: any) => ['failure', 'timed_out', 'cancelled'].includes((r.conclusion || '').toLowerCase()));
-  const botComments = (reviewComments || []).filter((c: any) => isBotUser(c.user?.login)).length;
+  const anyFailedStatus = (statuses || []).some((s: unknown) => ['failure', 'error'].includes(((s as { state?: string }).state || '').toLowerCase()));
+  const anyFailedCheck = (checkRuns || []).some((r: unknown) => ['failure', 'timed_out', 'cancelled'].includes(((r as { conclusion?: string }).conclusion || '').toLowerCase()));
+  const botComments = (reviewComments || []).filter((c: unknown) => isBotUser((c as { user?: { login?: string } }).user?.login)).length;
   let codeQualityScore = 6;
   if (!anyFailedStatus && !anyFailedCheck && botComments <= 2) codeQualityScore = 9;
   else if (anyFailedStatus || anyFailedCheck) codeQualityScore = 3;

@@ -30,7 +30,7 @@ export async function authenticateAdmin(request: NextRequest) {
     }
 
     // Get user info from token
-    const githubUsername = (token as any).githubUsername;
+    const githubUsername = (token as { githubUsername?: string }).githubUsername;
     if (!githubUsername) {
       return {
         success: false,
@@ -62,8 +62,8 @@ export async function authenticateAdmin(request: NextRequest) {
       success: true,
       admin
     };
-  } catch (error) {
-    console.error('Authentication error:', error);
+  } catch {
+    console.error('Authentication error');
     return {
       success: false,
       error: 'Authentication failed',
@@ -100,7 +100,7 @@ export async function authenticateDeveloper(request: NextRequest): Promise<NextR
       { success: false, message: 'JWT verification not implemented' },
       { status: 501 }
     );
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { success: false, message: 'Authentication error' },
       { status: 500 }

@@ -64,6 +64,7 @@ export function RealWalletConnect() {
                 className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground transition-colors"
               >
                 {wallet.icon && (
+                  // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={wallet.icon}
                     alt={wallet.name}

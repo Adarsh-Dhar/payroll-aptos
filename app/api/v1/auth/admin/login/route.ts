@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '@/lib/prisma';
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -26,7 +24,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (password !== (admin as any).password) {
+    if (password !== (admin as { password: string }).password) {
       return NextResponse.json(
         { success: false, message: 'Invalid credentials' },
         { status: 401 }
@@ -50,7 +48,5 @@ export async function POST(request: NextRequest) {
       { success: false, message: 'Internal server error' },
       { status: 500 }
     );
-  } finally {
-    await prisma.$disconnect();
   }
 }

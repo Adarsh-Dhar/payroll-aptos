@@ -48,9 +48,7 @@ export interface UseProjectEscrowReturn extends UseProjectEscrowState, UseProjec
  * @param contractAddress - The contract address to interact with (optional, uses default from client)
  * @returns Object with state and actions for the project escrow contract
  */
-export const useProjectEscrow = (
-  contractAddress?: string
-): UseProjectEscrowReturn => {
+export const useProjectEscrow = (): UseProjectEscrowReturn => {
   const [state, setState] = useState<UseProjectEscrowState>({
     loading: false,
     error: null,

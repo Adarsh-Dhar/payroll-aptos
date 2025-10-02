@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get developer ID from session
-    const sessionUser = session.user as any;
+    const sessionUser = session.user as { email?: string; githubUsername?: string; login?: string; name?: string };
     let developerId = null;
     
     try {
@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
             username: sessionUser.githubUsername || sessionUser.login || sessionUser.name || sessionUser.email,
             email: sessionUser.email,
             updatedAt: new Date(),
-          } as any
+          }
         });
         
         developerId = newDeveloper.id;
@@ -143,10 +143,10 @@ export async function POST(request: NextRequest) {
               highestBounty: 0.10,
               adminId: 1,
               updatedAt: new Date(),
-            } as any
+            }
           });
-        } catch (e: any) {
-          const message = e?.message || '';
+        } catch (e: unknown) {
+          const message = (e as { message?: string }).message || '';
           if (message.includes('budget')) {
             const now = new Date();
             const insertSql = `
@@ -174,7 +174,7 @@ export async function POST(request: NextRequest) {
               now,
               0.10
             ];
-            const rows = await prisma.$queryRawUnsafe<any[]>(insertSql, ...params);
+            const rows = await prisma.$queryRawUnsafe<unknown[]>(insertSql, ...params);
             const inserted = rows && rows[0];
             if (!inserted) throw e;
             newProject = inserted;
@@ -240,7 +240,7 @@ export async function POST(request: NextRequest) {
               bountyAmount: bountyAmount,
               bountyClaimed: false,
               updatedAt: new Date(),
-            } as any
+            }
           });
           
           existingPR = newPR;
@@ -264,7 +264,7 @@ export async function POST(request: NextRequest) {
             existingPR = existingPRs[0];
             
             // Check if already claimed by THIS developer
-            if (existingPR.bountyClaimed && (existingPR as any).bountyClaimedBy === developerId) {
+            if (existingPR.bountyClaimed && (existingPR as { bountyClaimedBy?: number }).bountyClaimedBy === developerId) {
               console.log('⚠️ PR already claimed by this developer');
               return NextResponse.json(
                 { success: false, message: 'You have already claimed this PR' },
@@ -273,7 +273,7 @@ export async function POST(request: NextRequest) {
             }
             
             // If claimed by another developer, we can still create a new PR record for this developer
-            if (existingPR.bountyClaimed && (existingPR as any).bountyClaimedBy !== developerId) {
+            if (existingPR.bountyClaimed && (existingPR as { bountyClaimedBy?: number }).bountyClaimedBy !== developerId) {
               console.log('ℹ️ PR claimed by another developer, creating new record for this developer');
               existingPR = null; // Force creation of new PR record
             }
@@ -306,7 +306,7 @@ export async function POST(request: NextRequest) {
                 bountyAmount: bountyAmount,
                 bountyClaimed: false,
                 updatedAt: new Date(),
-              } as any
+              }
             });
             
             existingPR = newPR;
@@ -341,7 +341,7 @@ export async function POST(request: NextRequest) {
           bountyClaimedAmount: bountyAmount,
           amountPaid: bountyAmount,
           updatedAt: new Date(),
-        } as any
+        }
       });
       
       console.log('✅ PR marked as claimed successfully:', updatedPR.id);
@@ -356,7 +356,7 @@ export async function POST(request: NextRequest) {
           status: 'completed',
           transactionId: `bounty-${project.id}-${prNumber}-${Date.now()}`,
           updatedAt: new Date(),
-        } as any
+        }
       });
       
       console.log('✅ Payout record created:', payout.id);
@@ -404,9 +404,7 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   } finally {
-    if (typeof prisma !== 'undefined') {
-      await prisma.$disconnect();
-    }
+    // Cleanup handled by Prisma
   }
 }
 

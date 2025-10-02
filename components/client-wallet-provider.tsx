@@ -14,6 +14,7 @@ export function ClientWalletProvider({ children }: PropsWithChildren) {
   }
 
   // Dynamically import the wallet provider only on client side
-  const WalletProvider = require("@/app/provider").WalletProvider;
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { WalletProvider } = require("@/app/provider");
   return <WalletProvider>{children}</WalletProvider>;
 }

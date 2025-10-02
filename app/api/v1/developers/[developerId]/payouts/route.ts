@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '@/lib/prisma';
 
 const querySchema = z.object({
   page: z.string().transform(Number).pipe(z.number().min(1)).default('1'),
@@ -42,7 +40,7 @@ export async function GET(
     }
 
     // Build where clause
-    const where: any = { developerId: developerIdNum };
+    const where: Record<string, unknown> = { developerId: developerIdNum };
     
     if (projectId) {
       where.projectId = projectId;
@@ -135,7 +133,7 @@ export async function GET(
 
     const projectBreakdownWithStats = projectBreakdown.map(project => {
       const projectPayouts = project.Payout;
-      const totalProjectAmount = projectPayouts.reduce((sum: number, p: any) => sum + p.amount, 0);
+      const totalProjectAmount = projectPayouts.reduce((sum: number, p: { amount: number }) => sum + p.amount, 0);
       
       return {
         id: project.id,
@@ -180,7 +178,5 @@ export async function GET(
       { success: false, message: 'Internal server error' },
       { status: 500 }
     );
-  } finally {
-    await prisma.$disconnect();
   }
 }

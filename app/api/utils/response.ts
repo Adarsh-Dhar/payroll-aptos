@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
 
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
   message?: string;
-  errors?: any[];
+  errors?: unknown[];
   pagination?: {
     page: number;
     limit: number;
@@ -28,7 +28,7 @@ export function successResponse<T>(
 export function errorResponse(
   message: string,
   status: number = 400,
-  errors?: any[]
+  errors?: unknown[]
 ): NextResponse<ApiResponse> {
   return NextResponse.json({
     success: false,
@@ -69,7 +69,7 @@ export function forbiddenResponse(message: string = 'Forbidden'): NextResponse<A
   return errorResponse(message, 403);
 }
 
-export function validationErrorResponse(errors: any[]): NextResponse<ApiResponse> {
+export function validationErrorResponse(errors: unknown[]): NextResponse<ApiResponse> {
   return errorResponse('Validation failed', 400, errors);
 }
 
@@ -77,7 +77,7 @@ export function internalServerErrorResponse(message: string = 'Internal server e
   return errorResponse(message, 500);
 }
 
-export function conflictResponse(message: string, data?: any): NextResponse<ApiResponse> {
+export function conflictResponse(message: string, data?: unknown): NextResponse<ApiResponse> {
   return NextResponse.json({
     success: false,
     message,

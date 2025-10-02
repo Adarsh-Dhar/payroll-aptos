@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '@/lib/prisma';
 
 const createPRSchema = z.object({
   prNumber: z.number().positive(),
@@ -56,7 +54,7 @@ export async function GET(
     }
 
     // Build where clause
-    const where: any = { projectId: projectIdNum };
+    const where: Record<string, unknown> = { projectId: projectIdNum };
     
     if (merged !== undefined) {
       where.merged = merged;
@@ -122,8 +120,6 @@ export async function GET(
       { success: false, message: 'Internal server error' },
       { status: 500 }
     );
-  } finally {
-    await prisma.$disconnect();
   }
 }
 
@@ -247,7 +243,5 @@ export async function POST(
       { success: false, message: 'Internal server error' },
       { status: 500 }
     );
-  } finally {
-    await prisma.$disconnect();
   }
 }

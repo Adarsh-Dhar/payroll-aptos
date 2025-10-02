@@ -249,7 +249,7 @@ export function CreateProjectDialog() {
 							<LogIn className="h-4 w-4 text-green-600" />
 							<span className="text-muted-foreground">Signed in as:</span>
 							<span className="font-mono text-xs">
-								{(session?.user as any)?.githubUsername || session?.user?.name}
+								{(session?.user as { githubUsername?: string })?.githubUsername || session?.user?.name}
 							</span>
 						</div>
 					</div>

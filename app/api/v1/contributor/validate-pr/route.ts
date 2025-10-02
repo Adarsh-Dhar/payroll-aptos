@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Get GitHub username from session
-    const sessionUser = session.user as any;
+    const sessionUser = session.user as { githubUsername?: string };
     const githubUsername = sessionUser.githubUsername;
     
     if (!githubUsername) {

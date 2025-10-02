@@ -1,9 +1,9 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import { AlertCircle, CheckCircle, Loader2, Wallet } from "lucide-react"
+// import { Button } from "@/components/ui/button"
+// import { Card, CardContent } from "@/components/ui/card"
+// import { AlertCircle, CheckCircle, Loader2, Wallet } from "lucide-react"
 import { projectEscrowClient } from "@/lib/contract"
 import { useToast } from "@/hooks/use-toast"
 
@@ -11,7 +11,7 @@ import { useToast } from "@/hooks/use-toast"
 declare global {
   interface Window {
     aptos?: {
-      account: () => Promise<any>
+      account: () => Promise<unknown>
       connect: () => Promise<void>
     }
   }
@@ -29,9 +29,9 @@ export function InitializeVaultButton({
   onInitialized 
 }: InitializeVaultButtonProps) {
   const [isInitializing, setIsInitializing] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState(false)
-  const [showWalletConnect, setShowWalletConnect] = useState(false)
+  const [, setError] = useState<string | null>(null)
+  const [, setSuccess] = useState(false)
+  const [, setShowWalletConnect] = useState(false)
   const { toast } = useToast()
 
   const handleInitialize = async () => {
@@ -108,12 +108,12 @@ export function InitializeVaultButton({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isVaultInitialized, isGeneratorInitialized])
 
-  const handleConnectWallet = () => {
-    if (typeof window !== 'undefined' && window.aptos) {
-      window.aptos.connect()
-      setShowWalletConnect(false)
-    }
-  }
+  // const handleConnectWallet = () => {
+  //   if (typeof window !== 'undefined' && window.aptos) {
+  //     window.aptos.connect()
+  //     setShowWalletConnect(false)
+  //   }
+  // }
 
   // Don't show if both are already initialized
   if (isVaultInitialized && isGeneratorInitialized) {

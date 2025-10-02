@@ -17,14 +17,14 @@ export async function POST(request: NextRequest) {
     let body;
     try {
       body = await request.json();
-    } catch (error) {
+    } catch {
       return NextResponse.json(
         { success: false, message: 'Invalid JSON in request body' },
         { status: 400 }
       );
     }
     
-    const { prNumber, repository, additions, deletions, hasTests, description, commits, bountyAmount: providedBountyAmount, projectId, githubToken } = body;
+    const { prNumber, repository, additions, deletions, hasTests, description, bountyAmount: providedBountyAmount, projectId, githubToken } = body;
 
     if (!prNumber || !repository) {
       return NextResponse.json(
@@ -105,8 +105,6 @@ export async function POST(request: NextRequest) {
       }
     } catch (error) {
       console.error('Database error:', error);
-    } finally {
-      await prisma.$disconnect();
     }
     
     let contributionScore = 0;

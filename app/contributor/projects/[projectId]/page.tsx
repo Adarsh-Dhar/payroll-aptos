@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { 
-  GitBranch, 
   Users, 
   DollarSign, 
   ExternalLink, 
@@ -13,8 +12,7 @@ import {
   GitPullRequest,
   Star,
   TrendingUp,
-  ArrowLeft,
-  Tag
+  ArrowLeft
 } from "lucide-react"
 import Link from "next/link"
 import { notFound } from "next/navigation"

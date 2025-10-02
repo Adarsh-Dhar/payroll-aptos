@@ -1,9 +1,7 @@
 "use client"
 
 import { AppHeader } from "@/components/app-header"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Progress } from "@/components/ui/progress"
-import { Badge } from "@/components/ui/badge"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Shield, Wallet } from "lucide-react"
 import { CreateProjectDialog } from "@/components/create-project-dialog"
@@ -18,54 +16,54 @@ import { Input } from "@/components/ui/input"
 import { Loader2 } from "lucide-react"
 
 // Define the data types based on our API response
-interface DashboardData {
-  overview: {
-    totalInitialFunding: number // deprecated, server returns 0 now
-    totalSpent: number
-    remainingInitialFunding: number // deprecated, server returns 0 now
-    totalProjects: number
-    totalDevelopers: number
-    totalPRs: number
-    mergedPRs: number
-    openPRs: number
-  }
-  recentActivity: {
-    pullRequests: number
-    payouts: number
-    newDevelopers: number
-  }
-  monthlyTrends: Array<{
-    month: string
-    pullRequests: number
-    payouts: number
-    mergedPRs: number
-  }>
-  topDevelopers: Array<{
-    id: number
-    username: string
-    githubId: string
-    totalEarnings: number
-    totalPRs: number
-    totalPayouts: number
-    averageEarnings: number
-  }>
-  projectPerformance: Array<{
-    id: number
-    name: string
-    initialFunding: number // deprecated, server omits
-    totalPRs: number
-    mergedPRs: number
-    totalPayouts: number
-    budgetUtilization: number
-    averageScore: number
-  }>
-  quickStats: {
-    averagePRScore: number
-    averagePayoutAmount: number
-    projectSuccessRate: number
-    fundingUtilizationRate: number // deprecated, server returns payout-based metrics
-  }
-}
+// interface DashboardData {
+//   overview: {
+//     totalInitialFunding: number // deprecated, server returns 0 now
+//     totalSpent: number
+//     remainingInitialFunding: number // deprecated, server returns 0 now
+//     totalProjects: number
+//     totalDevelopers: number
+//     totalPRs: number
+//     mergedPRs: number
+//     openPRs: number
+//   }
+//   recentActivity: {
+//     pullRequests: number
+//     payouts: number
+//     newDevelopers: number
+//   }
+//   monthlyTrends: Array<{
+//     month: string
+//     pullRequests: number
+//     payouts: number
+//     mergedPRs: number
+//   }>
+//   topDevelopers: Array<{
+//     id: number
+//     username: string
+//     githubId: string
+//     totalEarnings: number
+//     totalPRs: number
+//     totalPayouts: number
+//     averageEarnings: number
+//   }>
+//   projectPerformance: Array<{
+//     id: number
+//     name: string
+//     initialFunding: number // deprecated, server omits
+//     totalPRs: number
+//     mergedPRs: number
+//     totalPayouts: number
+//     budgetUtilization: number
+//     averageScore: number
+//   }>
+//   quickStats: {
+//     averagePRScore: number
+//     averagePayoutAmount: number
+//     projectSuccessRate: number
+//     fundingUtilizationRate: number // deprecated, server returns payout-based metrics
+//   }
+// }
 
 // Project Escrow data structure from contract
 interface ProjectEscrowData {
@@ -89,13 +87,11 @@ interface ContractStatus {
 export default function Page() {
 	const { data: session, status } = useSession()
 	const { connected, account, signAndSubmitTransaction } = useWallet()
-	const [data, setData] = useState<DashboardData | null>(null)
 	const [contractData, setContractData] = useState<{
 		contractStatus: ContractStatus | null
 		projectEscrows: ProjectEscrowData[]
 	} | null>(null)
-	const [loading, setLoading] = useState(true)
-	const [error, setError] = useState<string | null>(null)
+	const [, setLoading] = useState(true)
 	const [fundOpen, setFundOpen] = useState(false)
 	const [fundProject, setFundProject] = useState<ProjectEscrowData | null>(null)
 	const [fundAmount, setFundAmount] = useState("")
@@ -189,8 +185,8 @@ export default function Page() {
 			setFundOpen(false)
 			setFundProject(null)
 			setFundAmount("")
-		} catch (err: any) {
-			setFundError(err?.message || "Failed to fund project")
+			} catch (err: unknown) {
+				setFundError(err instanceof Error ? err.message : "Failed to fund project")
 		} finally {
 			setFunding(false)
 		}
@@ -249,7 +245,7 @@ export default function Page() {
 								<div>
 									<h1 className="text-3xl font-bold tracking-tight">Admin Dashboard</h1>
 									<p className="text-muted-foreground">
-										Welcome back, {session.user?.name || 'Admin'}! Here's what's happening with your projects.
+										Welcome back, {session.user?.name || 'Admin'}! Here&apos;s what&apos;s happening with your projects.
 									</p>
 								</div>
 								<div className="flex items-center gap-2">

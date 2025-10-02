@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '@/lib/prisma';
 
 const updatePRSchema = z.object({
   title: z.string().min(1).optional(),
@@ -74,8 +72,6 @@ export async function GET(
       { success: false, message: 'Internal server error' },
       { status: 500 }
     );
-  } finally {
-    await prisma.$disconnect();
   }
 }
 
@@ -123,7 +119,7 @@ export async function PATCH(
     }
 
     // If score is being updated, recalculate bounty amount
-    let finalUpdateData: any = { ...updateData, updatedAt: new Date() };
+    let finalUpdateData: Record<string, unknown> = { ...updateData, updatedAt: new Date() };
     
     if (updateData.score !== undefined) {
       const lowestBounty = existingPR.Project.lowestBounty;
@@ -193,7 +189,5 @@ export async function PATCH(
       { success: false, message: 'Internal server error' },
       { status: 500 }
     );
-  } finally {
-    await prisma.$disconnect();
   }
 }

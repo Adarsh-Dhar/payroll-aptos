@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { ArrowLeft, CheckCircle, AlertCircle, XCircle, Shield, Github, ExternalLink, Flame, Star, AlertTriangle, ThumbsDown, ThumbsUp } from "lucide-react"
+import { ArrowLeft, AlertCircle, XCircle, Shield, Github, ExternalLink, Flame, AlertTriangle, ThumbsDown, ThumbsUp } from "lucide-react"
 import Link from "next/link"
 import { useState, useEffect } from "react"
 import { useParams } from "next/navigation"
@@ -76,7 +76,7 @@ interface PRValidation {
 export default function PRValidationPage() {
   const params = useParams()
   const projectId = params.projectId as string
-  const { data: session, status } = useSession()
+  const { status } = useSession()
   
   const [project, setProject] = useState<Project | null>(null)
   const [loading, setLoading] = useState(true)
@@ -117,7 +117,7 @@ export default function PRValidationPage() {
         } else {
           setError(result.message || 'Failed to fetch project details')
         }
-      } catch (error) {
+      } catch {
         setError('Failed to fetch project details. Please try again.')
       } finally {
         setLoading(false)
@@ -272,12 +272,12 @@ export default function PRValidationPage() {
     return "text-red-400"
   }
 
-  const getScoreBgColor = (score: number) => {
-    if (score >= 8) return "bg-green-900/20"
-    if (score >= 6) return "bg-yellow-900/20"
-    if (score >= 4) return "bg-orange-900/20"
-    return "bg-red-900/20"
-  }
+  // const getScoreBgColor = (score: number) => {
+  //   if (score >= 8) return "bg-green-900/20"
+  //   if (score >= 6) return "bg-yellow-900/20"
+  //   if (score >= 4) return "bg-orange-900/20"
+  //   return "bg-red-900/20"
+  // }
 
   const getToneColor = (tone: string) => {
     switch (tone) {
@@ -437,7 +437,7 @@ export default function PRValidationPage() {
                     <div className="p-4 bg-green-900/20 border-l-4 border-green-500 rounded-lg">
                       <div className="flex items-center gap-2 mb-2">
                         <ThumbsUp className="h-5 w-5 text-green-400" />
-                        <h3 className="font-semibold text-green-300">✅ What's Good</h3>
+                        <h3 className="font-semibold text-green-300">✅ What&apos;s Good</h3>
                       </div>
                       <p className="text-green-200 text-sm leading-relaxed">
                         {prValidation.analysis.honest_review.what_they_did_right}
@@ -447,7 +447,7 @@ export default function PRValidationPage() {
                     <div className="p-4 bg-red-900/20 border-l-4 border-red-500 rounded-lg">
                       <div className="flex items-center gap-2 mb-2">
                         <ThumbsDown className="h-5 w-5 text-red-400" />
-                        <h3 className="font-semibold text-red-300">❌ What's Wrong</h3>
+                        <h3 className="font-semibold text-red-300">❌ What&apos;s Wrong</h3>
                       </div>
                       <p className="text-red-200 text-sm leading-relaxed">
                         {prValidation.analysis.honest_review.what_they_fucked_up}

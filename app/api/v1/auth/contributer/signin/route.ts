@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '@/lib/prisma';
 
 const signinSchema = z.object({
   githubId: z.string().min(1),
@@ -47,7 +45,7 @@ export async function POST(request: NextRequest) {
         username,
         email,
         password: password || null, // Optional password for GitHub OAuth users
-      } as any
+      }
     });
 
     // TODO: Implement proper JWT token generation
@@ -58,7 +56,7 @@ export async function POST(request: NextRequest) {
         id: contributor.id,
         githubId: contributor.githubId,
         username: contributor.username,
-        email: (contributor as any).email,
+        email: (contributor as { email: string | null }).email,
         role: 'contributor'
       }
     }, { status: 201 });
@@ -76,7 +74,5 @@ export async function POST(request: NextRequest) {
       { success: false, message: 'Internal server error' },
       { status: 500 }
     );
-  } finally {
-    await prisma.$disconnect();
   }
 }

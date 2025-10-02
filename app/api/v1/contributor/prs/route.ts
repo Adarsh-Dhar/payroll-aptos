@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     const mockDeveloperId = 1;
 
     // Build where clause
-    const where: any = { developerId: mockDeveloperId };
+    const where: Record<string, unknown> = { developerId: mockDeveloperId };
     
     if (merged !== undefined) {
       where.merged = merged;

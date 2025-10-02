@@ -139,8 +139,8 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function processPushEvent(webhookData: any) {
-  const { ref, before, after, repository, commits } = webhookData;
+async function processPushEvent(webhookData: unknown) {
+  const { ref, before, after, repository, commits } = webhookData as { ref?: string; before?: string; after?: string; repository?: { full_name?: string }; commits?: unknown[] };
   
   // Process push to main/master branch
   if (ref === 'refs/heads/main' || ref === 'refs/heads/master') {
@@ -151,12 +151,12 @@ async function processPushEvent(webhookData: any) {
       after,
       repository: repository?.full_name,
       commitCount: commits?.length || 0,
-      commits: commits?.map((commit: any) => ({
-        id: commit.id,
-        message: commit.message,
-        author: commit.author.name,
-        timestamp: commit.timestamp,
-        url: commit.url,
+      commits: commits?.map((commit: unknown) => ({
+        id: (commit as { id: string }).id,
+        message: (commit as { message: string }).message,
+        author: (commit as { author: { name: string } }).author.name,
+        timestamp: (commit as { timestamp: string }).timestamp,
+        url: (commit as { url: string }).url,
       })) || [],
       timestamp: new Date().toISOString(),
     };
@@ -165,8 +165,8 @@ async function processPushEvent(webhookData: any) {
   return null;
 }
 
-async function processPullRequestEvent(webhookData: any) {
-  const { action, pull_request, repository, sender } = webhookData;
+async function processPullRequestEvent(webhookData: unknown) {
+  const { action, pull_request, repository, sender } = webhookData as { action?: string; pull_request?: unknown; repository?: { full_name?: string }; sender?: { login?: string } };
   
   if (!pull_request) return null;
 
@@ -175,30 +175,30 @@ async function processPullRequestEvent(webhookData: any) {
     action,
     repository: repository?.full_name,
     pullRequest: {
-      id: pull_request.id,
-      number: pull_request.number,
-      title: pull_request.title,
-      body: pull_request.body,
-      state: pull_request.state,
-      merged: pull_request.merged,
-      mergedAt: pull_request.merged_at,
-      closedAt: pull_request.closed_at,
-      author: pull_request.user.login,
-      headBranch: pull_request.head.ref,
-      baseBranch: pull_request.base.ref,
-      additions: pull_request.additions,
-      deletions: pull_request.deletions,
-      changedFiles: pull_request.changed_files,
-      url: pull_request.html_url,
-      createdAt: pull_request.created_at,
-      updatedAt: pull_request.updated_at,
+      id: (pull_request as { id: number }).id,
+      number: (pull_request as { number: number }).number,
+      title: (pull_request as { title: string }).title,
+      body: (pull_request as { body?: string }).body,
+      state: (pull_request as { state: string }).state,
+      merged: (pull_request as { merged?: boolean }).merged,
+      mergedAt: (pull_request as { merged_at?: string }).merged_at,
+      closedAt: (pull_request as { closed_at?: string }).closed_at,
+      author: (pull_request as { user: { login: string } }).user.login,
+      headBranch: (pull_request as { head: { ref: string } }).head.ref,
+      baseBranch: (pull_request as { base: { ref: string } }).base.ref,
+      additions: (pull_request as { additions?: number }).additions,
+      deletions: (pull_request as { deletions?: number }).deletions,
+      changedFiles: (pull_request as { changed_files?: number }).changed_files,
+      url: (pull_request as { html_url: string }).html_url,
+      createdAt: (pull_request as { created_at: string }).created_at,
+      updatedAt: (pull_request as { updated_at: string }).updated_at,
     },
     sender: sender?.login,
     timestamp: new Date().toISOString(),
   };
 
   // Special handling for merged PRs
-  if (action === 'closed' && pull_request.merged) {
+  if (action === 'closed' && (pull_request as { merged?: boolean }).merged) {
     // TODO: Trigger payout calculation
     // await calculatePRPayout(prData);
   }
@@ -206,28 +206,28 @@ async function processPullRequestEvent(webhookData: any) {
   return prData;
 }
 
-async function processIssueEvent(webhookData: any) {
-  const { action, issue, repository, sender } = webhookData;
+async function processIssueEvent(webhookData: unknown) {
+  const { action, issue, repository, sender } = webhookData as { action?: string; issue?: unknown; repository?: { full_name?: string }; sender?: { login?: string } };
   
   return {
     type: 'issue',
     action,
     repository: repository?.full_name,
     issue: {
-      id: issue?.id,
-      number: issue?.number,
-      title: issue?.title,
-      state: issue?.state,
-      author: issue?.user?.login,
-      url: issue?.html_url,
+      id: (issue as { id?: number })?.id,
+      number: (issue as { number?: number })?.number,
+      title: (issue as { title?: string })?.title,
+      state: (issue as { state?: string })?.state,
+      author: (issue as { user?: { login?: string } })?.user?.login,
+      url: (issue as { html_url?: string })?.html_url,
     },
     sender: sender?.login,
     timestamp: new Date().toISOString(),
   };
 }
 
-async function processCreateEvent(webhookData: any) {
-  const { ref, ref_type, repository, sender } = webhookData;
+async function processCreateEvent(webhookData: unknown) {
+  const { ref, ref_type, repository, sender } = webhookData as { ref?: string; ref_type?: string; repository?: { full_name?: string }; sender?: { login?: string } };
   
   return {
     type: 'create',
@@ -239,8 +239,8 @@ async function processCreateEvent(webhookData: any) {
   };
 }
 
-async function processDeleteEvent(webhookData: any) {
-  const { ref, ref_type, repository, sender } = webhookData;
+async function processDeleteEvent(webhookData: unknown) {
+  const { ref, ref_type, repository, sender } = webhookData as { ref?: string; ref_type?: string; repository?: { full_name?: string }; sender?: { login?: string } };
   
   return {
     type: 'delete',
@@ -253,16 +253,16 @@ async function processDeleteEvent(webhookData: any) {
 }
 
 // Helper function to verify GitHub webhook signature
-function verifySignature(payload: any, signature: string, secret: string): boolean {
-  // TODO: Implement HMAC SHA256 verification
-  // const crypto = require('crypto');
-  // const expectedSignature = 'sha256=' + crypto
-  //   .createHmac('sha256', secret)
-  //   .update(JSON.stringify(payload))
-  //   .digest('hex');
-  // return crypto.timingSafeEqual(
-  //   Buffer.from(signature),
-  //   Buffer.from(expectedSignature)
-  // );
-  return true; // Placeholder
-}
+// function verifySignature(payload: unknown, signature: string, secret: string): boolean {
+//   // TODO: Implement HMAC SHA256 verification
+//   // const crypto = require('crypto');
+//   // const expectedSignature = 'sha256=' + crypto
+//   //   .createHmac('sha256', secret)
+//   //   .update(JSON.stringify(payload))
+//   //   .digest('hex');
+//   // return crypto.timingSafeEqual(
+//   //   Buffer.from(signature),
+//   //   Buffer.from(expectedSignature)
+//   // );
+//   return true; // Placeholder
+// }

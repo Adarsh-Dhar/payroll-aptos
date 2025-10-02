@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '@/lib/prisma';
 
 const signinSchema = z.object({
   email: z.string().email(),
@@ -35,7 +33,7 @@ export async function POST(request: NextRequest) {
         email,
         password: hashedPassword,
         name: name || email.split('@')[0], // Use email prefix as default name
-      } as any
+      }
     });
 
     return NextResponse.json({
@@ -62,7 +60,5 @@ export async function POST(request: NextRequest) {
       { success: false, message: 'Internal server error' },
       { status: 500 }
     );
-  } finally {
-    await prisma.$disconnect();
   }
 }

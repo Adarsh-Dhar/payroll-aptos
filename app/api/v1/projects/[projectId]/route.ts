@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '@/lib/prisma';
 
 const updateProjectSchema = z.object({
   name: z.string().min(1).optional(),
@@ -96,9 +94,7 @@ export async function GET(
       { success: false, message: 'Internal server error' },
       { status: 500 }
     );
-  } finally {
-    await prisma.$disconnect();
-  }
+  } finally {}
 }
 
 export async function PUT(
@@ -203,9 +199,7 @@ export async function PUT(
       { success: false, message: 'Internal server error' },
       { status: 500 }
     );
-  } finally {
-    await prisma.$disconnect();
-  }
+  } finally {}
 }
 
 export async function DELETE(
@@ -261,7 +255,5 @@ export async function DELETE(
       { success: false, message: 'Internal server error' },
       { status: 500 }
     );
-  } finally {
-    await prisma.$disconnect();
-  }
+  } finally {}
 }

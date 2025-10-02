@@ -10,7 +10,7 @@ import { signIn, useSession, signOut } from 'next-auth/react';
 
 export default function AuthPage() {
   const { data: session, status } = useSession();
-  const [preferredRole, setPreferredRole] = useState<'admin' | 'contributor' | null>(null);
+  const [, setPreferredRole] = useState<'admin' | 'contributor' | null>(null);
   const [checkSession, setCheckSession] = useState(false);
   const router = useRouter();
 
@@ -71,7 +71,7 @@ export default function AuthPage() {
               <div className="space-y-5">
                 <Alert>
                   <AlertDescription>
-                    Signed in as {(session as any)?.user?.email || (session as any)?.user?.name}
+                    Signed in as {(session as { user?: { email?: string; name?: string } })?.user?.email || (session as { user?: { email?: string; name?: string } })?.user?.name}
                   </AlertDescription>
                 </Alert>
                 <div className="space-y-2 text-center">

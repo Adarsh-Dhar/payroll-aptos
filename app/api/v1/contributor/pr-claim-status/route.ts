@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '../../../auth/[...nextauth]/route';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '@/lib/prisma';
 
 export async function POST(request: NextRequest) {
   try {
@@ -106,7 +104,7 @@ export async function POST(request: NextRequest) {
     console.log('Extracted PR info:', { owner, repository, prNumber });
 
     // Get developer ID from session
-    const sessionUser = session.user as any;
+    const sessionUser = session.user as { email?: string; githubUsername?: string; login?: string; name?: string };
     let developerId = null;
     
     try {
@@ -133,7 +131,7 @@ export async function POST(request: NextRequest) {
             username: sessionUser.githubUsername || sessionUser.login || sessionUser.name || sessionUser.email,
             email: sessionUser.email,
             updatedAt: new Date(),
-          } as any
+          }
         });
         
         developerId = newDeveloper.id;
@@ -183,13 +181,13 @@ export async function POST(request: NextRequest) {
           let claimedAmount = existingPR.amountPaid;
           
           try {
-            if ((existingPR as any)?.bountyClaimedBy) {
-              claimedBy = `Developer ${(existingPR as any).bountyClaimedBy}`;
+            if ((existingPR as { bountyClaimedBy?: number })?.bountyClaimedBy) {
+              claimedBy = `Developer ${(existingPR as { bountyClaimedBy?: number }).bountyClaimedBy}`;
             }
-            if ((existingPR as any)?.bountyClaimedAmount) {
-              claimedAmount = (existingPR as any).bountyClaimedAmount;
+            if ((existingPR as { bountyClaimedAmount?: number })?.bountyClaimedAmount) {
+              claimedAmount = (existingPR as { bountyClaimedAmount?: number }).bountyClaimedAmount;
             }
-          } catch (e) {
+          } catch {
             console.log('Some bounty fields not available in current schema');
           }
           
@@ -284,7 +282,7 @@ export async function POST(request: NextRequest) {
           console.log('✅ Updating existing PR as claimed');
           
           // Build the update data object with only available fields
-          const updateData: any = {
+          const updateData: Record<string, unknown> = {
             bountyClaimed: true,
             bountyClaimedAt: new Date(),
             amountPaid: Number(bountyAmount),
@@ -294,13 +292,13 @@ export async function POST(request: NextRequest) {
           // Try to add fields that might exist in newer schema versions
           try {
             // Check if these fields exist by trying to access them
-            if (typeof (existingPR as any)?.bountyClaimedBy !== 'undefined') {
+            if (typeof (existingPR as { bountyClaimedBy?: number })?.bountyClaimedBy !== 'undefined') {
               updateData.bountyClaimedBy = developerId;
             }
-            if (typeof (existingPR as any)?.bountyClaimedAmount !== 'undefined') {
+            if (typeof (existingPR as { bountyClaimedAmount?: number })?.bountyClaimedAmount !== 'undefined') {
               updateData.bountyClaimedAmount = Number(bountyAmount);
             }
-          } catch (e) {
+          } catch {
             console.log('Some bounty fields not available in current schema, proceeding without them');
           }
 
@@ -313,7 +311,7 @@ export async function POST(request: NextRequest) {
           console.log('✅ Creating new PR record as claimed');
           
           // Build the data object with only available fields
-          const prData: any = {
+          const prData: Record<string, unknown> = {
             prNumber: prNumber,
             title: `PR #${prNumber} from ${owner}/${repository}`,
             description: `Auto-created PR record for ${owner}/${repository}#${prNumber}`,
@@ -335,13 +333,13 @@ export async function POST(request: NextRequest) {
           // Try to add fields that might exist in newer schema versions
           try {
             // Check if these fields exist by trying to access them
-            if (typeof (existingPR as any)?.bountyClaimedBy !== 'undefined') {
+            if (typeof (existingPR as { bountyClaimedBy?: number })?.bountyClaimedBy !== 'undefined') {
               prData.bountyClaimedBy = developerId;
             }
-            if (typeof (existingPR as any)?.bountyClaimedAmount !== 'undefined') {
+            if (typeof (existingPR as { bountyClaimedAmount?: number })?.bountyClaimedAmount !== 'undefined') {
               prData.bountyClaimedAmount = Number(bountyAmount);
             }
-          } catch (e) {
+          } catch {
             console.log('Some bounty fields not available in current schema, proceeding without them');
           }
 
@@ -360,7 +358,7 @@ export async function POST(request: NextRequest) {
             status: 'completed',
             transactionId: `bounty-${parsedProjectId}-${prNumber}-${Date.now()}`,
             updatedAt: new Date(),
-          } as any
+          }
         });
 
         console.log('✅ PR marked as claimed successfully');
@@ -394,9 +392,7 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   } finally {
-    if (typeof prisma !== 'undefined') {
-      await prisma.$disconnect();
-    }
+    // Cleanup handled by Prisma
   }
 }
 

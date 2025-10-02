@@ -96,7 +96,7 @@ export default function ClaimPage() {
   // ALL HOOKS MUST BE CALLED FIRST, BEFORE ANY CONDITIONAL LOGIC
   const params = useParams()
   const projectId = params.projectId as string
-  const { data: session, status } = useSession()
+  const { status } = useSession()
   const { connected, account, signAndSubmitTransaction } = useWallet()
   
   const [project, setProject] = useState<Project | null>(null)
@@ -118,13 +118,13 @@ export default function ClaimPage() {
   const [validationError, setValidationError] = useState<string | null>(null)
   const [calculatedBounty, setCalculatedBounty] = useState<number | null>(null)
   const [prScore, setPrScore] = useState<number | null>(null)
-  const [bountyCalculation, setBountyCalculation] = useState<any>(null)
+  const [bountyCalculation, setBountyCalculation] = useState<unknown>(null)
   const [withdrawalError, setWithdrawalError] = useState<string | null>(null)
-  const [withdrawalSuccess, setWithdrawalSuccess] = useState(false)
+  const [, setWithdrawalSuccess] = useState(false)
   const [transactionHash, setTransactionHash] = useState<string | null>(null)
   const [prClaimStatus, setPrClaimStatus] = useState<PRClaimStatus | null>(null)
-  const [checkingClaimStatus, setCheckingClaimStatus] = useState(false)
-  const [submittedPRs, setSubmittedPRs] = useState<Set<string>>(new Set())
+  const [, ] = useState(false)
+  const [, setSubmittedPRs] = useState<Set<string>>(new Set())
   const [isClaimable, setIsClaimable] = useState(false)
 
   // useEffect hooks must be called before any conditional returns
@@ -163,7 +163,7 @@ export default function ClaimPage() {
         } else {
           setError(result.message || 'Failed to fetch project details')
         }
-      } catch (error) {
+      } catch {
         setError('Failed to fetch project details. Please try again.')
       } finally {
         setLoading(false)
@@ -274,8 +274,8 @@ export default function ClaimPage() {
       } else {
         setIsClaimable(false)
       }
-    } catch (e: any) {
-      setValidationError(e?.message || 'Failed to validate PR')
+    } catch (e: unknown) {
+      setValidationError(e instanceof Error ? e.message : 'Failed to validate PR')
       setIsClaimable(false)
     } finally {
       setValidatingPr(false)
@@ -328,8 +328,8 @@ export default function ClaimPage() {
       }
 
       setSubmitted(true)
-    } catch (e: any) {
-      setWithdrawalError(e?.message || 'Failed to claim bounty')
+    } catch (e: unknown) {
+      setWithdrawalError(e instanceof Error ? e.message : 'Failed to claim bounty')
     } finally {
       setIsSubmitting(false)
     }
@@ -625,11 +625,11 @@ export default function ClaimPage() {
                               
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                                 <div className="p-2 bg-green-900/20 rounded border-l-4 border-green-500">
-                                  <div className="font-medium text-green-300 mb-1">✅ What's Good</div>
+                                  <div className="font-medium text-green-300 mb-1">✅ What&apos;s Good</div>
                                   <div className="text-green-200 text-xs">{prValidation.analysis.honest_review.what_they_did_right}</div>
                                 </div>
                                 <div className="p-2 bg-red-900/20 rounded border-l-4 border-red-500">
-                                  <div className="font-medium text-red-300 mb-1">❌ What's Wrong</div>
+                                  <div className="font-medium text-red-300 mb-1">❌ What&apos;s Wrong</div>
                                   <div className="text-red-200 text-xs">{prValidation.analysis.honest_review.what_they_fucked_up}</div>
                                 </div>
                               </div>
@@ -646,11 +646,11 @@ export default function ClaimPage() {
                     {typeof calculatedBounty === 'number' && (
                       <div className="mt-2 p-3 bg-green-900/20 border border-green-500/50 rounded text-sm text-green-200">
                         <div className="font-medium mb-1 text-green-100">Estimated Bounty: ${calculatedBounty.toFixed(4)}</div>
-                        {bountyCalculation ? (
+                        {bountyCalculation && typeof bountyCalculation === 'object' && 'formula' in bountyCalculation ? (
                           <div className="text-xs text-green-300 mt-1">
-                            <div>Formula: {bountyCalculation.formula}</div>
-                            {bountyCalculation.stepByStep && (
-                              <div className="mt-1 font-mono">{bountyCalculation.stepByStep}</div>
+                            <div>Formula: {(bountyCalculation as { formula: string }).formula}</div>
+                            {'stepByStep' in bountyCalculation && (bountyCalculation as { stepByStep: string }).stepByStep && (
+                              <div className="mt-1 font-mono">{(bountyCalculation as { stepByStep: string }).stepByStep}</div>
                             )}
                           </div>
                         ) : prScore !== null ? (

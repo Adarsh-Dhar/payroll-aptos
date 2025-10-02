@@ -1,19 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@/lib/prisma';
 import { authenticateAdmin } from '../../middleware/auth';
-
-// Declare global type for Prisma client
-declare global {
-  var prisma: PrismaClient | undefined;
-}
-
-// Create a singleton Prisma client instance
-const prisma = global.prisma || new PrismaClient();
-
-if (process.env.NODE_ENV !== 'production') {
-  global.prisma = prisma;
-}
 
 const createProjectSchema = z.object({
   name: z.string().min(1),
@@ -45,7 +33,7 @@ export async function GET(request: NextRequest) {
     const { page, limit, search, adminId, isActive, tags } = querySchema.parse(Object.fromEntries(searchParams));
 
     // Build where clause
-    const where: any = {};
+    const where: Record<string, unknown> = {};
     
     if (search) {
       where.OR = [
@@ -159,6 +147,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     
     // Remove adminId from body since we'll use the authenticated user's ID
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { adminId, ...projectDataWithoutAdminId } = body;
     
     const projectData = createProjectSchema.parse({
@@ -187,7 +176,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Strip non-persisted fields before writing to DB
-    const { initialFunding, ...projectCreateData } = projectData as any;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { initialFunding, ...projectCreateData } = projectData as Record<string, unknown>;
     if (projectCreateData.budget == null) {
       projectCreateData.budget = projectCreateData.highestBounty;
     }
@@ -198,7 +188,7 @@ export async function POST(request: NextRequest) {
         data: {
           ...projectCreateData,
           updatedAt: new Date(),
-        } as any,
+        },
         include: {
           Admin: {
             select: {
@@ -209,8 +199,8 @@ export async function POST(request: NextRequest) {
           }
         }
       });
-    } catch (e: any) {
-      const message: string = e?.message || '';
+    } catch (e: unknown) {
+      const message: string = (e as { message?: string }).message || '';
       const normalized = message.toLowerCase();
       // If Prisma validation claims a required `budget` field, bypass client validation and insert without budget
       if (normalized.includes('prismaclientvalidationerror') && normalized.includes('budget')) {
@@ -240,7 +230,7 @@ export async function POST(request: NextRequest) {
           ) RETURNING *
         `;
         try {
-          const rowsNoBudget = await prisma.$queryRawUnsafe<any[]>(insertSqlNoBudget, ...paramsNoBudget);
+          const rowsNoBudget = await prisma.$queryRawUnsafe<unknown[]>(insertSqlNoBudget, ...paramsNoBudget);
           const insertedNoBudget = rowsNoBudget && rowsNoBudget[0];
           if (insertedNoBudget) {
             const withAdminNoBudget = await prisma.project.findUnique({
@@ -256,7 +246,7 @@ export async function POST(request: NextRequest) {
               message: 'Project created successfully'
             }, { status: 201 });
           }
-        } catch (rawErr: any) {
+        } catch {
           // If raw insert without budget fails due to NOT NULL on budget, fall through to budget-including path below
         }
       }
@@ -295,7 +285,7 @@ export async function POST(request: NextRequest) {
           ) RETURNING *
         `;
 
-        const rows = await prisma.$queryRawUnsafe<any[]>(insertSql, ...params);
+        const rows = await prisma.$queryRawUnsafe<unknown[]>(insertSql, ...params);
         const inserted = rows && rows[0];
         if (!inserted) throw e;
 

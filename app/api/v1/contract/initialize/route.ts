@@ -1,8 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { projectEscrowClient } from '@/lib/contract';
 import { Account, Ed25519PrivateKey } from '@aptos-labs/ts-sdk';
 
-export async function POST(_request: NextRequest) {
+export async function POST() {
   try {
     const privateKeyHex = process.env.APTOS_DEPLOYER_PRIVATE_KEY;
 
@@ -29,7 +29,7 @@ export async function POST(_request: NextRequest) {
 
     // Ensure the deployer key matches the on-chain contract address
     const deployerAddress = account.accountAddress.toString();
-    const expectedAddress = (projectEscrowClient as any).contractAddress as string;
+    const expectedAddress = (projectEscrowClient as { contractAddress?: string }).contractAddress;
     if (!expectedAddress || expectedAddress.toLowerCase() !== deployerAddress.toLowerCase()) {
       return NextResponse.json(
         {
@@ -52,7 +52,7 @@ export async function POST(_request: NextRequest) {
     const ok = vault2 && generator2;
     return NextResponse.json({ success: ok, initialized: ok, txHash: result.hash });
   } catch (error) {
-    const err = error as any;
+    const err = error as { message?: string; stack?: string };
     const message = err?.message || 'Failed to initialize contract';
     const stack = err?.stack;
     // Even on error, include expected vs deployer if available
@@ -65,7 +65,7 @@ export async function POST(_request: NextRequest) {
         const account = Account.fromPrivateKey({ privateKey });
         deployerAddress = account.accountAddress.toString();
       }
-      expectedAddress = (projectEscrowClient as any).contractAddress as string;
+      expectedAddress = (projectEscrowClient as { contractAddress?: string }).contractAddress;
     } catch {}
     return NextResponse.json(
       {

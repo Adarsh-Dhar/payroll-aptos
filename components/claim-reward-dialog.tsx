@@ -24,7 +24,7 @@ interface ClaimRewardDialogProps {
     deletions: number
     hasTests: boolean
     description: string
-    commits: any[]
+    commits: unknown[]
     linkedIssue: string
     Project: {
       id: number
@@ -330,7 +330,7 @@ export default function ClaimRewardDialog({ isOpen, onClose, onBountyClaimed, pr
             />
             <p className="text-xs text-muted-foreground">
               Token must have permissions to read PRs on the repository. 
-              We'll use it to analyze your contribution and calculate the bounty.
+              We&apos;ll use it to analyze your contribution and calculate the bounty.
             </p>
           </div>
 

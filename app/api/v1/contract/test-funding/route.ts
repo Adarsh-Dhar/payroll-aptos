@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
         },
         message: 'Contract funding test completed successfully'
       });
-    } catch (error) {
+    } catch {
       return NextResponse.json(
         { success: false, message: 'Failed to get contract status' },
         { status: 500 }
