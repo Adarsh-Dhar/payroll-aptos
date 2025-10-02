@@ -53,7 +53,7 @@ export class Database {
       FROM "Project" 
       ${whereClause}
     `
-    const countResult = await sql(countQuery, params)
+    const countResult = await sql.query(countQuery, params)
     const total = parseInt(countResult[0].total)
 
     // Get projects with admin info
@@ -73,7 +73,7 @@ export class Database {
     `
     params.push(limit, offset)
 
-    const projects = await sql(projectsQuery, params)
+    const projects = await sql.query(projectsQuery, params)
 
     return {
       projects: projects.map(project => ({
@@ -140,7 +140,7 @@ export class Database {
       ) RETURNING *
     `
 
-    const result = await sql(query, [
+    const result = await sql.query(query, [
       name, description, repoUrl, adminId, isActive,
       maxContributors, tags, highestBounty, lowestBounty, budget
     ])
@@ -159,20 +159,20 @@ export class Database {
       LEFT JOIN "Admin" a ON p."adminId" = a.id
       WHERE p.id = $1
     `
-    const result = await sql(query, [id])
+    const result = await sql.query(query, [id])
     return result[0] || null
   }
 
   // Admin
   static async getAdminById(id: number) {
     const query = `SELECT * FROM "Admin" WHERE id = $1`
-    const result = await sql(query, [id])
+    const result = await sql.query(query, [id])
     return result[0] || null
   }
 
   static async getAdminByEmail(email: string) {
     const query = `SELECT * FROM "Admin" WHERE email = $1`
-    const result = await sql(query, [email])
+    const result = await sql.query(query, [email])
     return result[0] || null
   }
 }
