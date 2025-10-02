@@ -11,18 +11,13 @@ const nextConfig = {
     unoptimized: true,
   },
   serverExternalPackages: [
-    '@prisma/client',
-    '@prisma/client/wasm',
-    'prisma',
+    '@neondatabase/serverless',
     '@aptos-labs/ts-sdk',
     '@aptos-labs/aptos-client',
     'got',
     'cacheable-request',
     'keyv',
   ],
-  experimental: {
-    serverComponentsExternalPackages: ['@prisma/client', 'prisma'],
-  },
   webpack: (config, { isServer }) => {
     if (isServer) {
       config.externals.push('_http_common');

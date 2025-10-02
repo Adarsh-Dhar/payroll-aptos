@@ -26,13 +26,9 @@ export async function GET(
     }
 
     // Get project details to extract repository information
-    const { PrismaClient } = await import('@prisma/client');
-    const prisma = new PrismaClient();
+    const { Database } = await import('@/lib/database');
     
-    const project = await prisma.project.findUnique({
-      where: { id: projectIdNum },
-      select: { repoUrl: true, name: true }
-    });
+    const project = await Database.getProjectById(projectIdNum);
 
     if (!project) {
       return NextResponse.json(
