@@ -1,7 +1,7 @@
 import { neon } from '@neondatabase/serverless'
 
 // Create a single database connection instance
-const sql = neon(process.env.DATABASE_URL!)
+const sql = neon(process.env.DATABASE_URL || '')
 
 // Database query helper functions
 export class Database {
@@ -14,8 +14,9 @@ export class Database {
     isActive?: boolean
     tags?: string[]
   } = {}) {
-    const { page = 1, limit = 20, search, adminId, isActive, tags } = filters
-    const offset = (page - 1) * limit
+    try {
+      const { page = 1, limit = 20, search, adminId, isActive, tags } = filters
+      const offset = (page - 1) * limit
 
     let whereConditions = []
     let params: any[] = []
@@ -103,6 +104,10 @@ export class Database {
       total,
       totalPages: Math.ceil(total / limit)
     }
+    } catch (error) {
+      console.error('Database.getProjects error:', error);
+      throw new Error(`Database query failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
   static async createProject(projectData: {
@@ -117,18 +122,19 @@ export class Database {
     lowestBounty: number
     budget?: number
   }) {
-    const {
-      name,
-      description,
-      repoUrl,
-      adminId,
-      isActive = true,
-      maxContributors,
-      tags = [],
-      highestBounty,
-      lowestBounty,
-      budget = highestBounty
-    } = projectData
+    try {
+      const {
+        name,
+        description,
+        repoUrl,
+        adminId,
+        isActive = true,
+        maxContributors,
+        tags = [],
+        highestBounty,
+        lowestBounty,
+        budget = highestBounty
+      } = projectData
 
     const query = `
       INSERT INTO "Project" (
@@ -146,6 +152,10 @@ export class Database {
     ])
 
     return result[0]
+    } catch (error) {
+      console.error('Database.createProject error:', error);
+      throw new Error(`Database query failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 
   static async getProjectById(id: number) {
